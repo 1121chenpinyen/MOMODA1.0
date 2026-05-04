@@ -30,6 +30,7 @@ import {
 
 import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
+import { addSeeds } from "../../utils/storage";
 
 const TAGS = [
   "心情",
@@ -178,13 +179,13 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const authorIds = Array.from(
-      new Set(posts.map((post) => post.authorId).filter(Boolean))
+      new Set(posts.map((post) => post.authorId).filter(Boolean)),
     );
 
     if (authorIds.length === 0) return;
 
     const unsubscribes = authorIds.map((authorId) => {
-      const profileRef = doc(db, "profiles", authorId);
+      const profileRef = doc(db, "profiles", authorId as string);
 
       return onSnapshot(profileRef, (snap) => {
         if (snap.exists()) {
@@ -192,7 +193,7 @@ export default function HomeScreen() {
 
           setProfileMap((prev) => ({
             ...prev,
-            [authorId]: {
+            [authorId as string]: {
               name: data.userId || "匿名小夥伴",
               avatar: data.avatarUrl || "",
             },
@@ -210,7 +211,7 @@ export default function HomeScreen() {
 
     if (searchText.trim()) {
       result = result.filter((post) =>
-        post.text?.toLowerCase().includes(searchText.trim().toLowerCase())
+        post.text?.toLowerCase().includes(searchText.trim().toLowerCase()),
       );
     }
 
@@ -262,7 +263,7 @@ export default function HomeScreen() {
   const handlePublish = async (
     text: string,
     media: MediaType | null,
-    tag: string
+    tag: string,
   ) => {
     if (!text.trim() && !media) {
       Alert.alert("請輸入內容或選擇照片/影片");
@@ -299,7 +300,11 @@ export default function HomeScreen() {
         authorAvatar: currentUser.avatar,
       });
 
+      // 🌱 發布後給予 1 顆種子
+      await addSeeds(1);
+
       setPublishVisible(false);
+      Alert.alert("成功", "貼文已發布，你獲得了 1 顆種子！");
     } catch (error: any) {
       Alert.alert("發布失敗", error?.message || "請稍後再試");
     } finally {
@@ -568,13 +573,16 @@ export default function HomeScreen() {
                 <View style={styles.postHeader}>
                   <View style={styles.authorArea}>
                     {renderAvatar(
-                      profileMap[post.authorId || ""]?.avatar || post.authorAvatar,
-                      40
+                      profileMap[post.authorId || ""]?.avatar ||
+                        post.authorAvatar,
+                      40,
                     )}
 
                     <View style={{ marginLeft: 10 }}>
                       <Text style={styles.authorName}>
-                        {profileMap[post.authorId || ""]?.name || post.authorName || "匿名小夥伴"}
+                        {profileMap[post.authorId || ""]?.name ||
+                          post.authorName ||
+                          "匿名小夥伴"}
                       </Text>
                       <Text style={styles.postTime}>
                         {formatTime(post.createdAt)}
@@ -625,10 +633,7 @@ export default function HomeScreen() {
                       color={hasLiked ? "#ff4f7b" : "#999"}
                     />
                     <Text
-                      style={[
-                        styles.actionText,
-                        hasLiked && styles.likedText,
-                      ]}
+                      style={[styles.actionText, hasLiked && styles.likedText]}
                     >
                       {post.likes || 0}
                     </Text>
@@ -662,7 +667,6 @@ export default function HomeScreen() {
                     </Text>
                   </TouchableOpacity>
                 </View>
-
               </View>
             );
           })
@@ -714,7 +718,7 @@ export default function HomeScreen() {
                     {renderAvatar(
                       profileMap[selectedPost.authorId || ""]?.avatar ||
                         selectedPost.authorAvatar,
-                      40
+                      40,
                     )}
 
                     <View style={{ marginLeft: 10 }}>
@@ -768,43 +772,51 @@ export default function HomeScreen() {
                     <Text style={styles.noCommentText}>目前沒有留言</Text>
                   </View>
                 ) : (
-                  (selectedPost.comments || []).map((comment: any, index: number) => {
-                    const commentText =
-                      typeof comment === "string" ? comment : comment.text;
+                  (selectedPost.comments || []).map(
+                    (comment: any, index: number) => {
+                      const commentText =
+                        typeof comment === "string" ? comment : comment.text;
 
-                    const commentUserName =
-                      typeof comment === "string"
-                        ? "匿名小夥伴"
-                        : comment.userName || "匿名小夥伴";
+                      const commentUserName =
+                        typeof comment === "string"
+                          ? "匿名小夥伴"
+                          : comment.userName || "匿名小夥伴";
 
-                    const commentUserAvatar =
-                      typeof comment === "string" ? "" : comment.userAvatar || "";
+                      const commentUserAvatar =
+                        typeof comment === "string"
+                          ? ""
+                          : comment.userAvatar || "";
 
-                    const commentCreatedAt =
-                      typeof comment === "string" ? null : comment.createdAt;
+                      const commentCreatedAt =
+                        typeof comment === "string" ? null : comment.createdAt;
 
-                    return (
-                      <View
-                        key={comment.id || `${selectedPost.id}-comment-${index}`}
-                        style={styles.commentItem}
-                      >
-                        {renderAvatar(commentUserAvatar, 32)}
+                      return (
+                        <View
+                          key={
+                            comment.id || `${selectedPost.id}-comment-${index}`
+                          }
+                          style={styles.commentItem}
+                        >
+                          {renderAvatar(commentUserAvatar, 32)}
 
-                        <View style={styles.commentContent}>
-                          <View style={styles.commentHeader}>
-                            <Text style={styles.commentUserName}>
-                              {commentUserName}
-                            </Text>
-                            <Text style={styles.commentTime}>
-                              {formatTime(commentCreatedAt)}
+                          <View style={styles.commentContent}>
+                            <View style={styles.commentHeader}>
+                              <Text style={styles.commentUserName}>
+                                {commentUserName}
+                              </Text>
+                              <Text style={styles.commentTime}>
+                                {formatTime(commentCreatedAt)}
+                              </Text>
+                            </View>
+
+                            <Text style={styles.commentText}>
+                              {commentText}
                             </Text>
                           </View>
-
-                          <Text style={styles.commentText}>{commentText}</Text>
                         </View>
-                      </View>
-                    );
-                  })
+                      );
+                    },
+                  )
                 )}
               </View>
             </ScrollView>
@@ -910,7 +922,7 @@ function PublishDialog({
           width: asset.width,
           height: asset.height,
           fileSize: asset.fileSize,
-          duration: asset.duration,
+          duration: asset.duration ?? undefined,
         });
       }
     } catch (error: any) {

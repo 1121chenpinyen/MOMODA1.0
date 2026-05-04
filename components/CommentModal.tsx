@@ -14,6 +14,7 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useEffect, useState } from "react";
 import {
+    Alert,
     FlatList,
     Image,
     Modal,
@@ -25,6 +26,7 @@ import {
     View,
 } from "react-native";
 import { db, storage } from "../config/firebaseConfig";
+import { getGarden, growPlant } from "../utils/storage";
 
 interface CommentModalProps {
   visible: boolean;
@@ -43,11 +45,13 @@ export default function CommentModal({
   userAvatar,
   onCommentAdded,
 }: CommentModalProps) {
-  const [commentText, setCommentText] = useState("");
-  const [commentImage, setCommentImage] = useState(null);
-  const [comments, setComments] = useState([]);
-  const [commentAvatars, setCommentAvatars] = useState({});
-  const [isLoading, setIsLoading] = useState(false);
+  const [commentText, setCommentText] = useState<string>("");
+  const [commentImage, setCommentImage] = useState<string | null>(null);
+  const [comments, setComments] = useState<any[]>([]);
+  const [commentAvatars, setCommentAvatars] = useState<Record<string, string>>(
+    {},
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [postAuthorAvatar, setPostAuthorAvatar] = useState<string | null>(null);
 
   useEffect(() => {
@@ -58,7 +62,9 @@ export default function CommentModal({
 
     const loadPostAuthorAvatar = async () => {
       try {
-        const profileDoc = await getDoc(doc(db, "profiles", post.deviceId));
+        const profileDoc = await getDoc(
+          doc(db, "profiles", post.deviceId as string),
+        );
         if (!profileDoc.exists()) {
           setPostAuthorAvatar(null);
           return;
@@ -98,7 +104,7 @@ export default function CommentModal({
         if (data.fromDeviceId && !avatarMap[data.fromDeviceId]) {
           try {
             const profileDoc = await getDoc(
-              doc(db, "profiles", data.fromDeviceId),
+              doc(db, "profiles", data.fromDeviceId as string),
             );
             if (profileDoc.exists()) {
               avatarMap[data.fromDeviceId] = profileDoc.data().avatarUrl;
@@ -130,7 +136,7 @@ export default function CommentModal({
     });
 
     if (!result.canceled) {
-      setCommentImage(result.assets[0].uri);
+      setCommentImage(result.assets[0].uri as string);
     }
   };
 
@@ -143,9 +149,9 @@ export default function CommentModal({
 
       // 上傳圖片
       if (commentImage && commentImage.startsWith("file")) {
-        const blob = await new Promise((resolve, reject) => {
+        const blob = await new Promise<Blob>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          xhr.onload = () => resolve(xhr.response);
+          xhr.onload = () => resolve(xhr.response as Blob);
           xhr.onerror = () => reject(new Error("上傳失敗"));
           xhr.responseType = "blob";
           xhr.open("GET", commentImage, true);
@@ -154,7 +160,7 @@ export default function CommentModal({
 
         const filename = `comments/${userDeviceId}_${Date.now()}.jpg`;
         const storageRef = ref(storage, filename);
-        const snapshot = await uploadBytes(storageRef, blob);
+        const snapshot = await uploadBytes(storageRef, blob as Blob);
         imageUrl = await getDownloadURL(snapshot.ref);
       }
 
@@ -169,6 +175,32 @@ export default function CommentModal({
         isRead: false,
         isComment: true,
       });
+
+      // 🌱 植物成長邏輯：當有人回覆貼文時，貼文作者的所有植物都會成長
+      if (post?.deviceId) {
+        try {
+          const garden = await getGarden();
+          // 增加該用戶所有已種植植物的回覆計數
+          for (const plant of garden.plants || []) {
+            await growPlant(plant.id, 1);
+          }
+
+          // 如果植物有顯著進度，可以顯示通知
+          const updatedGarden = await getGarden();
+          const plantsWithProgress = (updatedGarden.plants || []).filter(
+            (p: any) => p.repliesCount % 5 === 0 && p.repliesCount > 0,
+          );
+
+          if (plantsWithProgress.length > 0) {
+            Alert.alert(
+              "🌱 植物成長",
+              `你的 ${plantsWithProgress.length} 株植物获得新的回覆，正在成長！`,
+            );
+          }
+        } catch (err) {
+          console.error("植物成長更新失敗:", err);
+        }
+      }
 
       if (post?.id) {
         onCommentAdded?.(post.id);

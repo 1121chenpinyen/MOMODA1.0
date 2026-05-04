@@ -1,0 +1,115 @@
+[
+  {
+    "id": "seed_1",
+    "name": "向日葵種子",
+    "type": "sunflower",
+    "rarity": "common",
+    "image": "./assets/plants/sunflower_seed.png",
+    "stages": [
+      {
+        "growth": 0,
+        "name": "種子",
+        "image": "./assets/plants/sunflower_seed.png"
+      },
+      {
+        "growth": 1,
+        "name": "小芽",
+        "image": "./assets/plants/sunflower_sprout.png"
+      },
+      {
+        "growth": 2,
+        "name": "幼苗",
+        "image": "./assets/plants/sunflower_seedling.png"
+      },
+      {
+        "growth": 3,
+        "name": "成長中",
+        "image": "./assets/plants/sunflower_growing.png"
+      },
+      {
+        "growth": 4,
+        "name": "即將開花",
+        "image": "./assets/plants/sunflower_blooming.png"
+      },
+      {
+        "growth": 5,
+        "name": "盛開",
+        "image": "./assets/plants/sunflower_flower.png"
+      }
+    ]
+  },
+  {
+    "id": "seed_2",
+    "name": "玫瑰種子",
+    "type": "rose",
+    "rarity": "uncommon",
+    "image": "./assets/plants/rose_seed.png",
+    "stages": [
+      { "growth": 0, "name": "種子", "image": "./assets/plants/rose_seed.png" },
+      {
+        "growth": 1,
+        "name": "小芽",
+        "image": "./assets/plants/rose_sprout.png"
+      },
+      {
+        "growth": 2,
+        "name": "幼苗",
+        "image": "./assets/plants/rose_seedling.png"
+      },
+      {
+        "growth": 3,
+        "name": "成長中",
+        "image": "./assets/plants/rose_growing.png"
+      },
+      {
+        "growth": 4,
+        "name": "即將開花",
+        "image": "./assets/plants/rose_blooming.png"
+      },
+      {
+        "growth": 5,
+        "name": "盛開",
+        "image": "./assets/plants/rose_flower.png"
+      }
+    ]
+  },
+  {
+    "id": "seed_3",
+    "name": "櫻花種子",
+    "type": "cherry",
+    "rarity": "rare",
+    "image": "./assets/plants/cherry_seed.png",
+    "stages": [
+      {
+        "growth": 0,
+        "name": "種子",
+        "image": "./assets/plants/cherry_seed.png"
+      },
+      {
+        "growth": 1,
+        "name": "小芽",
+        "image": "./assets/plants/cherry_sprout.png"
+      },
+      {
+        "growth": 2,
+        "name": "幼苗",
+        "image": "./assets/plants/cherry_seedling.png"
+      },
+      {
+        "growth": 3,
+        "name": "成長中",
+        "image": "./assets/plants/cherry_growing.png"
+      },
+      {
+        "growth": 4,
+        "name": "即將開花",
+        "image": "./assets/plants/cherry_blooming.png"
+      },
+      {
+        "growth": 5,
+        "name": "盛開",
+        "image": "./assets/plants/cherry_flower.png"
+      }
+    ]
+  }
+]
