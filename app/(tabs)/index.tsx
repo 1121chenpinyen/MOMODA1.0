@@ -70,6 +70,9 @@ type CommentType = {
   userName: string;
   userAvatar: string;
   createdAt: any;
+
+  likes?: number;
+  likedBy?: string[];
 };
 
 type PostType = {
@@ -124,7 +127,37 @@ export default function HomeScreen() {
   const [selectedFilterTag, setSelectedFilterTag] = useState("");
   const [sortMode, setSortMode] = useState<"new" | "old" | "likes">("new");
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const handleLikeComment = async (commentId: string) => {
+  if (!selectedPost || !currentUser.userId) return;
 
+  const updatedComments = (selectedPost.comments || []).map((c: any) => {
+    if (c.id !== commentId) return c;
+
+    const likedBy = c.likedBy || [];
+    const hasLiked = likedBy.includes(currentUser.userId);
+
+    return {
+      ...c,
+      likes: (c.likes || 0) + (hasLiked ? -1 : 1),
+      likedBy: hasLiked
+        ? likedBy.filter((id: string) => id !== currentUser.userId)
+        : [...likedBy, currentUser.userId],
+    };
+  });
+
+  try {
+    await updateDoc(doc(db, "posts", selectedPost.id), {
+      comments: updatedComments,
+    });
+
+    setSelectedPost({
+      ...selectedPost,
+      comments: updatedComments,
+    });
+    } catch {
+      Alert.alert("錯誤", "留言按讚失敗");
+    }
+  };
   useEffect(() => {
     let unsubscribeProfile: (() => void) | undefined;
 
@@ -388,6 +421,8 @@ export default function HomeScreen() {
         userName: currentUser.name,
         userAvatar: currentUser.avatar,
         createdAt: new Date().toISOString(),
+        likes: 0,
+        likedBy: [],
       };
 
       const updatedComments = [...oldComments, newComment];
@@ -837,6 +872,29 @@ export default function HomeScreen() {
                               <Text style={styles.commentText}>
                                 {commentText}
                               </Text>
+                              <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
+                                <TouchableOpacity
+                                  onPress={() => handleLikeComment(comment.id)}
+                                  style={{ flexDirection: "row", alignItems: "center" }}
+                                >
+                                  <Ionicons
+                                    name={
+                                      (comment.likedBy || []).includes(currentUser.userId)
+                                        ? "heart"
+                                        : "heart-outline"
+                                    }
+                                    size={16}
+                                    color={
+                                      (comment.likedBy || []).includes(currentUser.userId)
+                                        ? "#ff4f7b"
+                                        : "#999"
+                                    }
+                                  />
+                                  <Text style={{ marginLeft: 4, fontSize: 12, color: "#666" }}>
+                                    {comment.likes || 0}
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
                             </View>
                           </View>
                         );
