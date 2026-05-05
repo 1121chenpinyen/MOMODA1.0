@@ -26,6 +26,9 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
 } from "react-native";
 
 import { db, storage } from "../../config/firebaseConfig";
@@ -206,6 +209,15 @@ export default function HomeScreen() {
       unsubscribes.forEach((unsub) => unsub());
     };
   }, [posts]);
+  useEffect(() => {
+    if (!selectedPost) return;
+
+    const latestPost = posts.find((post) => post.id === selectedPost.id);
+
+    if (latestPost) {
+      setSelectedPost(latestPost);
+    }
+  }, [posts, selectedPost?.id]);
   const filteredPosts = useMemo(() => {
     let result = [...posts];
 
@@ -318,15 +330,15 @@ export default function HomeScreen() {
     const likedBy = post.likedBy || [];
     const hasLiked = likedBy.includes(currentUser.userId);
 
-    if (hasLiked) return;
-
     try {
       await updateDoc(doc(db, "posts", post.id), {
-        likes: increment(1),
-        likedBy: [...likedBy, currentUser.userId],
+        likes: increment(hasLiked ? -1 : 1),
+        likedBy: hasLiked
+          ? likedBy.filter((id) => id !== currentUser.userId)
+          : [...likedBy, currentUser.userId],
       });
     } catch {
-      Alert.alert("發生錯誤", "無法按讚");
+      Alert.alert("發生錯誤", "無法更新按讚");
     }
   };
 
@@ -378,13 +390,19 @@ export default function HomeScreen() {
         createdAt: new Date().toISOString(),
       };
 
+      const updatedComments = [...oldComments, newComment];
+
       await updateDoc(doc(db, "posts", selectedPost.id), {
-        comments: [...oldComments, newComment],
+        comments: updatedComments,
+      });
+
+      Keyboard.dismiss();
+      setSelectedPost({
+        ...selectedPost,
+        comments: updatedComments,
       });
 
       setCommentText("");
-      setCommentVisible(false);
-      setSelectedPost(null);
     } catch {
       Alert.alert("留言失敗", "請稍後再試");
     }
@@ -625,7 +643,6 @@ export default function HomeScreen() {
                   <TouchableOpacity
                     style={styles.actionBtn}
                     onPress={() => handleLike(post)}
-                    disabled={hasLiked}
                   >
                     <Ionicons
                       name={hasLiked ? "heart" : "heart-outline"}
@@ -694,151 +711,160 @@ export default function HomeScreen() {
         animationType="slide"
         onRequestClose={() => setCommentVisible(false)}
       >
-        <SafeAreaView style={styles.postDetailContainer}>
-          <View style={styles.postDetailHeader}>
-            <TouchableOpacity
-              onPress={() => {
-                setCommentVisible(false);
-                setSelectedPost(null);
-              }}
-            >
-              <Ionicons name="chevron-back" size={26} color="#333" />
-            </TouchableOpacity>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+        >
+          <SafeAreaView style={styles.postDetailContainer}>
+            <View style={styles.postDetailHeader}>
+              <TouchableOpacity
+                onPress={() => {
+                  setCommentVisible(false);
+                  setSelectedPost(null);
+                }}
+              >
+                <Ionicons name="chevron-back" size={26} color="#333" />
+              </TouchableOpacity>
 
-            <Text style={styles.postDetailTitle}>貼文留言</Text>
+              <Text style={styles.postDetailTitle}>貼文留言</Text>
 
-            <View style={{ width: 26 }} />
-          </View>
+              <View style={{ width: 26 }} />
+            </View>
 
-          {selectedPost && (
-            <ScrollView style={styles.postDetailContent}>
-              <View style={styles.postDetailCard}>
-                <View style={styles.postHeader}>
-                  <View style={styles.authorArea}>
-                    {renderAvatar(
-                      profileMap[selectedPost.authorId || ""]?.avatar ||
-                        selectedPost.authorAvatar,
-                      40,
-                    )}
+            {selectedPost && (
+              <ScrollView
+                style={styles.postDetailContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <View style={styles.postDetailCard}>
+                  <View style={styles.postHeader}>
+                    <View style={styles.authorArea}>
+                      {renderAvatar(
+                        profileMap[selectedPost.authorId || ""]?.avatar ||
+                          selectedPost.authorAvatar,
+                        40,
+                      )}
 
-                    <View style={{ marginLeft: 10 }}>
-                      <Text style={styles.authorName}>
-                        {profileMap[selectedPost.authorId || ""]?.name ||
-                          selectedPost.authorName ||
-                          "匿名小夥伴"}
-                      </Text>
-                      <Text style={styles.postTime}>
-                        {formatTime(selectedPost.createdAt)}
-                      </Text>
+                      <View style={{ marginLeft: 10 }}>
+                        <Text style={styles.authorName}>
+                          {profileMap[selectedPost.authorId || ""]?.name ||
+                            selectedPost.authorName ||
+                            "匿名小夥伴"}
+                        </Text>
+                        <Text style={styles.postTime}>
+                          {formatTime(selectedPost.createdAt)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
+
+                  {selectedPost.tag && (
+                    <View style={styles.postTag}>
+                      <Text style={styles.postTagText}>#{selectedPost.tag}</Text>
+                    </View>
+                  )}
+
+                  {selectedPost.text ? (
+                    <Text style={styles.postText}>{selectedPost.text}</Text>
+                  ) : null}
+
+                  {selectedPost.media && selectedPost.media.type === "photo" && (
+                    <Image
+                      source={{ uri: selectedPost.media.url }}
+                      style={styles.postImage}
+                    />
+                  )}
+
+                  {selectedPost.media && selectedPost.media.type === "video" && (
+                    <View style={styles.videoBox}>
+                      <Ionicons name="videocam" size={36} color="#fff" />
+                      <Text style={styles.videoText}>影片貼文</Text>
+                    </View>
+                  )}
                 </View>
 
-                {selectedPost.tag && (
-                  <View style={styles.postTag}>
-                    <Text style={styles.postTagText}>#{selectedPost.tag}</Text>
-                  </View>
-                )}
+                <View style={styles.detailCommentSection}>
+                  <Text style={styles.detailCommentTitle}>留言</Text>
 
-                {selectedPost.text ? (
-                  <Text style={styles.postText}>{selectedPost.text}</Text>
-                ) : null}
+                  {(selectedPost.comments || []).length === 0 ? (
+                    <View style={styles.noCommentBox}>
+                      <Ionicons
+                        name="chatbubble-ellipses-outline"
+                        size={42}
+                        color="#c7c1ea"
+                      />
+                      <Text style={styles.noCommentText}>目前沒有留言</Text>
+                    </View>
+                  ) : (
+                    (selectedPost.comments || []).map(
+                      (comment: any, index: number) => {
+                        const commentText =
+                          typeof comment === "string" ? comment : comment.text;
 
-                {selectedPost.media && selectedPost.media.type === "photo" && (
-                  <Image
-                    source={{ uri: selectedPost.media.url }}
-                    style={styles.postImage}
-                  />
-                )}
+                        const commentUserName =
+                          typeof comment === "string"
+                            ? "匿名小夥伴"
+                            : comment.userName || "匿名小夥伴";
 
-                {selectedPost.media && selectedPost.media.type === "video" && (
-                  <View style={styles.videoBox}>
-                    <Ionicons name="videocam" size={36} color="#fff" />
-                    <Text style={styles.videoText}>影片貼文</Text>
-                  </View>
-                )}
-              </View>
+                        const commentUserAvatar =
+                          typeof comment === "string"
+                            ? ""
+                            : comment.userAvatar || "";
 
-              <View style={styles.detailCommentSection}>
-                <Text style={styles.detailCommentTitle}>留言</Text>
+                        const commentCreatedAt =
+                          typeof comment === "string" ? null : comment.createdAt;
 
-                {(selectedPost.comments || []).length === 0 ? (
-                  <View style={styles.noCommentBox}>
-                    <Ionicons
-                      name="chatbubble-ellipses-outline"
-                      size={42}
-                      color="#c7c1ea"
-                    />
-                    <Text style={styles.noCommentText}>目前沒有留言</Text>
-                  </View>
-                ) : (
-                  (selectedPost.comments || []).map(
-                    (comment: any, index: number) => {
-                      const commentText =
-                        typeof comment === "string" ? comment : comment.text;
+                        return (
+                          <View
+                            key={
+                              comment.id || `${selectedPost.id}-comment-${index}`
+                            }
+                            style={styles.commentItem}
+                          >
+                            {renderAvatar(commentUserAvatar, 32)}
 
-                      const commentUserName =
-                        typeof comment === "string"
-                          ? "匿名小夥伴"
-                          : comment.userName || "匿名小夥伴";
+                            <View style={styles.commentContent}>
+                              <View style={styles.commentHeader}>
+                                <Text style={styles.commentUserName}>
+                                  {commentUserName}
+                                </Text>
+                                <Text style={styles.commentTime}>
+                                  {formatTime(commentCreatedAt)}
+                                </Text>
+                              </View>
 
-                      const commentUserAvatar =
-                        typeof comment === "string"
-                          ? ""
-                          : comment.userAvatar || "";
-
-                      const commentCreatedAt =
-                        typeof comment === "string" ? null : comment.createdAt;
-
-                      return (
-                        <View
-                          key={
-                            comment.id || `${selectedPost.id}-comment-${index}`
-                          }
-                          style={styles.commentItem}
-                        >
-                          {renderAvatar(commentUserAvatar, 32)}
-
-                          <View style={styles.commentContent}>
-                            <View style={styles.commentHeader}>
-                              <Text style={styles.commentUserName}>
-                                {commentUserName}
-                              </Text>
-                              <Text style={styles.commentTime}>
-                                {formatTime(commentCreatedAt)}
+                              <Text style={styles.commentText}>
+                                {commentText}
                               </Text>
                             </View>
-
-                            <Text style={styles.commentText}>
-                              {commentText}
-                            </Text>
                           </View>
-                        </View>
-                      );
-                    },
-                  )
-                )}
-              </View>
-            </ScrollView>
-          )}
+                        );
+                      },
+                    )
+                  )}
+                </View>
+              </ScrollView>
+            )}
 
-          <View style={styles.commentInputBar}>
-            <TextInput
-              style={styles.commentInputInPage}
-              placeholder="輸入你的留言..."
-              placeholderTextColor="#aaa"
-              value={commentText}
-              onChangeText={setCommentText}
-            />
+            <View style={styles.commentInputBar}>
+              <TextInput
+                style={styles.commentInputInPage}
+                placeholder="輸入你的留言..."
+                placeholderTextColor="#aaa"
+                value={commentText}
+                onChangeText={setCommentText}
+              />
 
-            <TouchableOpacity
-              style={styles.sendCommentBtn}
-              onPress={handleAddComment}
-            >
-              <Ionicons name="send" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+              <TouchableOpacity
+                style={styles.sendCommentBtn}
+                onPress={handleAddComment}
+              >
+                <Ionicons name="send" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
