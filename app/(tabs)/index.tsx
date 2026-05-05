@@ -125,11 +125,12 @@ export default function HomeScreen() {
   const [profileMap, setProfileMap] = useState<Record<string, any>>({});
   const [searchText, setSearchText] = useState("");
   const [selectedFilterTag, setSelectedFilterTag] = useState("");
-  const [sortMode, setSortMode] = useState<"new" | "old" | "likes">("new");
+  const [sortMode, setSortMode] = useState<"new" | "likes" | "saves">("new");
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [commentSortMode, setCommentSortMode] = useState<"new" | "likes">("new");
   const handleLikeComment = async (commentId: string) => {
   if (!selectedPost || !currentUser.userId) return;
-
+  
   const updatedComments = (selectedPost.comments || []).map((c: any) => {
     if (c.id !== commentId) return c;
 
@@ -251,6 +252,25 @@ export default function HomeScreen() {
       setSelectedPost(latestPost);
     }
   }, [posts, selectedPost?.id]);
+  const sortedComments = useMemo(() => {
+    const comments = [...(selectedPost?.comments || [])];
+
+    if (commentSortMode === "new") {
+      comments.sort((a: any, b: any) => {
+        const timeA = new Date(a.createdAt || 0).getTime();
+        const timeB = new Date(b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+    }
+
+    if (commentSortMode === "likes") {
+      comments.sort((a: any, b: any) => {
+        return (b.likes || 0) - (a.likes || 0);
+      });
+    }
+
+    return comments;
+  }, [selectedPost?.comments, commentSortMode]);
   const filteredPosts = useMemo(() => {
     let result = [...posts];
 
@@ -264,11 +284,11 @@ export default function HomeScreen() {
       result = result.filter((post) => post.tag === selectedFilterTag);
     }
 
-    if (sortMode === "old") {
+    if (sortMode === "saves") {
       result.sort((a, b) => {
-        const timeA = a.createdAt?.seconds || 0;
-        const timeB = b.createdAt?.seconds || 0;
-        return timeA - timeB;
+        const savesA = (a.savedBy || []).length;
+        const savesB = (b.savedBy || []).length;
+        return savesB - savesA;
       });
     }
 
@@ -469,9 +489,9 @@ export default function HomeScreen() {
   };
 
   const getSortText = () => {
-    if (sortMode === "new") return "新到舊";
-    if (sortMode === "old") return "舊到新";
-    return "讚數多";
+    if (sortMode === "new") return "最新";
+    if (sortMode === "likes") return "讚數最多";
+    return "收藏最多";
   };
 
   const renderAvatar = (avatar?: string, size = 40) => {
@@ -538,19 +558,10 @@ export default function HomeScreen() {
                 setShowSortMenu(false);
               }}
             >
-              <Text style={styles.sortMenuText}>時間新到舊</Text>
+              <Text style={styles.sortMenuText}>最新</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.sortMenuItem}
-              onPress={() => {
-                setSortMode("old");
-                setShowSortMenu(false);
-              }}
-            >
-              <Text style={styles.sortMenuText}>時間舊到新</Text>
-            </TouchableOpacity>
-
+            
             <TouchableOpacity
               style={styles.sortMenuItem}
               onPress={() => {
@@ -558,7 +569,17 @@ export default function HomeScreen() {
                 setShowSortMenu(false);
               }}
             >
-              <Text style={styles.sortMenuText}>讚數多到少</Text>
+              <Text style={styles.sortMenuText}>讚數最多</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sortMenuItem}
+              onPress={() => {
+                setSortMode("saves");
+                setShowSortMenu(false);
+              }}
+            >
+              <Text style={styles.sortMenuText}>收藏數最多</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -715,7 +736,7 @@ export default function HomeScreen() {
                       color="#f0a94d"
                     />
                     <Text style={styles.actionText}>
-                      {hasSaved ? "已收藏" : "收藏"}
+                      {(post.savedBy || []).length}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -820,7 +841,45 @@ export default function HomeScreen() {
                 </View>
 
                 <View style={styles.detailCommentSection}>
-                  <Text style={styles.detailCommentTitle}>留言</Text>
+                  <View style={styles.commentSortHeader}>
+                    <Text style={styles.detailCommentTitle}>留言</Text>
+
+                    <View style={styles.commentSortBtns}>
+                      <TouchableOpacity
+                        style={[
+                          styles.commentSortBtn,
+                          commentSortMode === "new" && styles.commentSortBtnActive,
+                        ]}
+                        onPress={() => setCommentSortMode("new")}
+                      >
+                        <Text
+                          style={[
+                            styles.commentSortText,
+                            commentSortMode === "new" && styles.commentSortTextActive,
+                          ]}
+                        >
+                          最新
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.commentSortBtn,
+                          commentSortMode === "likes" && styles.commentSortBtnActive,
+                        ]}
+                        onPress={() => setCommentSortMode("likes")}
+                      >
+                        <Text
+                          style={[
+                            styles.commentSortText,
+                            commentSortMode === "likes" && styles.commentSortTextActive,
+                          ]}
+                        >
+                          讚數最高
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
 
                   {(selectedPost.comments || []).length === 0 ? (
                     <View style={styles.noCommentBox}>
@@ -832,7 +891,7 @@ export default function HomeScreen() {
                       <Text style={styles.noCommentText}>目前沒有留言</Text>
                     </View>
                   ) : (
-                    (selectedPost.comments || []).map(
+                    sortedComments.map(
                       (comment: any, index: number) => {
                         const commentText =
                           typeof comment === "string" ? comment : comment.text;
@@ -860,22 +919,23 @@ export default function HomeScreen() {
                             {renderAvatar(commentUserAvatar, 32)}
 
                             <View style={styles.commentContent}>
-                              <View style={styles.commentHeader}>
-                                <Text style={styles.commentUserName}>
-                                  {commentUserName}
-                                </Text>
-                                <Text style={styles.commentTime}>
-                                  {formatTime(commentCreatedAt)}
-                                </Text>
-                              </View>
+                              <Text style={styles.commentUserName}>
+                                {commentUserName}
+                              </Text>
 
                               <Text style={styles.commentText}>
                                 {commentText}
                               </Text>
-                              <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
+
+                              
+                              <View style={styles.commentBottomRow}>
+                                <Text style={styles.commentTime}>
+                                  {formatTime(commentCreatedAt)}
+                                </Text>
+
                                 <TouchableOpacity
                                   onPress={() => handleLikeComment(comment.id)}
-                                  style={{ flexDirection: "row", alignItems: "center" }}
+                                  style={styles.commentLikeBtn}
                                 >
                                   <Ionicons
                                     name={
@@ -890,7 +950,7 @@ export default function HomeScreen() {
                                         : "#999"
                                     }
                                   />
-                                  <Text style={{ marginLeft: 4, fontSize: 12, color: "#666" }}>
+                                  <Text style={styles.commentLikeText}>
                                     {comment.likes || 0}
                                   </Text>
                                 </TouchableOpacity>
@@ -1289,6 +1349,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#333",
   },
+  commentBottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 6,
+  },
+
+  commentLikeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  commentLikeText: {
+    marginLeft: 4,
+    fontSize: 12,
+    color: "#666",
+  },
   sendCommentBtn: {
     width: 42,
     height: 42,
@@ -1529,6 +1606,39 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  commentSortHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+
+  commentSortBtns: {
+    flexDirection: "row",
+    backgroundColor: "#f4f2fb",
+    borderRadius: 16,
+    padding: 3,
+  },
+
+  commentSortBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 13,
+  },
+
+  commentSortBtnActive: {
+    backgroundColor: "#a29add",
+  },
+
+  commentSortText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#777",
+  },
+
+  commentSortTextActive: {
+    color: "#fff",
   },
   commentUserName: {
     fontSize: 13,
