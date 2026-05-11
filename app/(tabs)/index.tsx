@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
 import {
   addDoc,
   collection,
@@ -18,7 +19,10 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -26,14 +30,12 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  KeyboardAvoidingView,
-  Platform,
-  Keyboard,
 } from "react-native";
 
 import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
-import { addSeeds } from "../../utils/storage";
+import { getRandomVariantForTag } from "../../utils/plantCatalog";
+import { createPlantForPost, getGarden, growPlant } from "../../utils/storage";
 
 const TAGS = [
   "心情",
@@ -110,6 +112,7 @@ function formatTime(createdAt: any) {
 }
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [currentUser, setCurrentUser] = useState<UserType>({
     userId: "",
     name: "匿名小夥伴",
@@ -127,34 +130,36 @@ export default function HomeScreen() {
   const [selectedFilterTag, setSelectedFilterTag] = useState("");
   const [sortMode, setSortMode] = useState<"new" | "likes" | "saves">("new");
   const [showSortMenu, setShowSortMenu] = useState(false);
-  const [commentSortMode, setCommentSortMode] = useState<"new" | "likes">("new");
+  const [commentSortMode, setCommentSortMode] = useState<"new" | "likes">(
+    "new",
+  );
   const handleLikeComment = async (commentId: string) => {
-  if (!selectedPost || !currentUser.userId) return;
-  
-  const updatedComments = (selectedPost.comments || []).map((c: any) => {
-    if (c.id !== commentId) return c;
+    if (!selectedPost || !currentUser.userId) return;
 
-    const likedBy = c.likedBy || [];
-    const hasLiked = likedBy.includes(currentUser.userId);
+    const updatedComments = (selectedPost.comments || []).map((c: any) => {
+      if (c.id !== commentId) return c;
 
-    return {
-      ...c,
-      likes: (c.likes || 0) + (hasLiked ? -1 : 1),
-      likedBy: hasLiked
-        ? likedBy.filter((id: string) => id !== currentUser.userId)
-        : [...likedBy, currentUser.userId],
-    };
-  });
+      const likedBy = c.likedBy || [];
+      const hasLiked = likedBy.includes(currentUser.userId);
 
-  try {
-    await updateDoc(doc(db, "posts", selectedPost.id), {
-      comments: updatedComments,
+      return {
+        ...c,
+        likes: (c.likes || 0) + (hasLiked ? -1 : 1),
+        likedBy: hasLiked
+          ? likedBy.filter((id: string) => id !== currentUser.userId)
+          : [...likedBy, currentUser.userId],
+      };
     });
 
-    setSelectedPost({
-      ...selectedPost,
-      comments: updatedComments,
-    });
+    try {
+      await updateDoc(doc(db, "posts", selectedPost.id), {
+        comments: updatedComments,
+      });
+
+      setSelectedPost({
+        ...selectedPost,
+        comments: updatedComments,
+      });
     } catch {
       Alert.alert("錯誤", "留言按讚失敗");
     }
@@ -350,7 +355,7 @@ export default function HomeScreen() {
 
       const uploadedMedia = await uploadMediaAsync(media);
 
-      await addDoc(collection(db, "posts"), {
+      const postRef = await addDoc(collection(db, "posts"), {
         text: text.trim(),
         tag,
         media: uploadedMedia,
@@ -365,11 +370,16 @@ export default function HomeScreen() {
         authorAvatar: currentUser.avatar,
       });
 
-      // 🌱 發布後給予 1 顆種子
-      await addSeeds(1);
-
-      setPublishVisible(false);
-      Alert.alert("成功", "貼文已發布，你獲得了 1 顆種子！");
+      const variant = getRandomVariantForTag(tag);
+      if (variant) {
+        await createPlantForPost(variant, postRef.id);
+        setPublishVisible(false);
+        router.push("/garden");
+        Alert.alert("成功", `貼文已發布，植物已在花園長出來了！`);
+      } else {
+        setPublishVisible(false);
+        Alert.alert("成功", "貼文已發布！");
+      }
     } catch (error: any) {
       Alert.alert("發布失敗", error?.message || "請稍後再試");
     } finally {
@@ -450,6 +460,19 @@ export default function HomeScreen() {
       await updateDoc(doc(db, "posts", selectedPost.id), {
         comments: updatedComments,
       });
+
+      try {
+        const garden = await getGarden();
+
+        // 只增長與該貼文相關的植物
+        for (const plant of garden.plants || []) {
+          if (plant.postId === selectedPost.id) {
+            await growPlant(plant.id, 1);
+          }
+        }
+      } catch (gardenError) {
+        console.error("更新花園成長失敗:", gardenError);
+      }
 
       Keyboard.dismiss();
       setSelectedPost({
@@ -561,7 +584,6 @@ export default function HomeScreen() {
               <Text style={styles.sortMenuText}>最新</Text>
             </TouchableOpacity>
 
-            
             <TouchableOpacity
               style={styles.sortMenuItem}
               onPress={() => {
@@ -817,7 +839,9 @@ export default function HomeScreen() {
 
                   {selectedPost.tag && (
                     <View style={styles.postTag}>
-                      <Text style={styles.postTagText}>#{selectedPost.tag}</Text>
+                      <Text style={styles.postTagText}>
+                        #{selectedPost.tag}
+                      </Text>
                     </View>
                   )}
 
@@ -825,19 +849,21 @@ export default function HomeScreen() {
                     <Text style={styles.postText}>{selectedPost.text}</Text>
                   ) : null}
 
-                  {selectedPost.media && selectedPost.media.type === "photo" && (
-                    <Image
-                      source={{ uri: selectedPost.media.url }}
-                      style={styles.postImage}
-                    />
-                  )}
+                  {selectedPost.media &&
+                    selectedPost.media.type === "photo" && (
+                      <Image
+                        source={{ uri: selectedPost.media.url }}
+                        style={styles.postImage}
+                      />
+                    )}
 
-                  {selectedPost.media && selectedPost.media.type === "video" && (
-                    <View style={styles.videoBox}>
-                      <Ionicons name="videocam" size={36} color="#fff" />
-                      <Text style={styles.videoText}>影片貼文</Text>
-                    </View>
-                  )}
+                  {selectedPost.media &&
+                    selectedPost.media.type === "video" && (
+                      <View style={styles.videoBox}>
+                        <Ionicons name="videocam" size={36} color="#fff" />
+                        <Text style={styles.videoText}>影片貼文</Text>
+                      </View>
+                    )}
                 </View>
 
                 <View style={styles.detailCommentSection}>
@@ -848,14 +874,16 @@ export default function HomeScreen() {
                       <TouchableOpacity
                         style={[
                           styles.commentSortBtn,
-                          commentSortMode === "new" && styles.commentSortBtnActive,
+                          commentSortMode === "new" &&
+                            styles.commentSortBtnActive,
                         ]}
                         onPress={() => setCommentSortMode("new")}
                       >
                         <Text
                           style={[
                             styles.commentSortText,
-                            commentSortMode === "new" && styles.commentSortTextActive,
+                            commentSortMode === "new" &&
+                              styles.commentSortTextActive,
                           ]}
                         >
                           最新
@@ -865,14 +893,16 @@ export default function HomeScreen() {
                       <TouchableOpacity
                         style={[
                           styles.commentSortBtn,
-                          commentSortMode === "likes" && styles.commentSortBtnActive,
+                          commentSortMode === "likes" &&
+                            styles.commentSortBtnActive,
                         ]}
                         onPress={() => setCommentSortMode("likes")}
                       >
                         <Text
                           style={[
                             styles.commentSortText,
-                            commentSortMode === "likes" && styles.commentSortTextActive,
+                            commentSortMode === "likes" &&
+                              styles.commentSortTextActive,
                           ]}
                         >
                           讚數最高
@@ -891,75 +921,76 @@ export default function HomeScreen() {
                       <Text style={styles.noCommentText}>目前沒有留言</Text>
                     </View>
                   ) : (
-                    sortedComments.map(
-                      (comment: any, index: number) => {
-                        const commentText =
-                          typeof comment === "string" ? comment : comment.text;
+                    sortedComments.map((comment: any, index: number) => {
+                      const commentText =
+                        typeof comment === "string" ? comment : comment.text;
 
-                        const commentUserName =
-                          typeof comment === "string"
-                            ? "匿名小夥伴"
-                            : comment.userName || "匿名小夥伴";
+                      const commentUserName =
+                        typeof comment === "string"
+                          ? "匿名小夥伴"
+                          : comment.userName || "匿名小夥伴";
 
-                        const commentUserAvatar =
-                          typeof comment === "string"
-                            ? ""
-                            : comment.userAvatar || "";
+                      const commentUserAvatar =
+                        typeof comment === "string"
+                          ? ""
+                          : comment.userAvatar || "";
 
-                        const commentCreatedAt =
-                          typeof comment === "string" ? null : comment.createdAt;
+                      const commentCreatedAt =
+                        typeof comment === "string" ? null : comment.createdAt;
 
-                        return (
-                          <View
-                            key={
-                              comment.id || `${selectedPost.id}-comment-${index}`
-                            }
-                            style={styles.commentItem}
-                          >
-                            {renderAvatar(commentUserAvatar, 32)}
+                      return (
+                        <View
+                          key={
+                            comment.id || `${selectedPost.id}-comment-${index}`
+                          }
+                          style={styles.commentItem}
+                        >
+                          {renderAvatar(commentUserAvatar, 32)}
 
-                            <View style={styles.commentContent}>
-                              <Text style={styles.commentUserName}>
-                                {commentUserName}
+                          <View style={styles.commentContent}>
+                            <Text style={styles.commentUserName}>
+                              {commentUserName}
+                            </Text>
+
+                            <Text style={styles.commentText}>
+                              {commentText}
+                            </Text>
+
+                            <View style={styles.commentBottomRow}>
+                              <Text style={styles.commentTime}>
+                                {formatTime(commentCreatedAt)}
                               </Text>
 
-                              <Text style={styles.commentText}>
-                                {commentText}
-                              </Text>
-
-                              
-                              <View style={styles.commentBottomRow}>
-                                <Text style={styles.commentTime}>
-                                  {formatTime(commentCreatedAt)}
+                              <TouchableOpacity
+                                onPress={() => handleLikeComment(comment.id)}
+                                style={styles.commentLikeBtn}
+                              >
+                                <Ionicons
+                                  name={
+                                    (comment.likedBy || []).includes(
+                                      currentUser.userId,
+                                    )
+                                      ? "heart"
+                                      : "heart-outline"
+                                  }
+                                  size={16}
+                                  color={
+                                    (comment.likedBy || []).includes(
+                                      currentUser.userId,
+                                    )
+                                      ? "#ff4f7b"
+                                      : "#999"
+                                  }
+                                />
+                                <Text style={styles.commentLikeText}>
+                                  {comment.likes || 0}
                                 </Text>
-
-                                <TouchableOpacity
-                                  onPress={() => handleLikeComment(comment.id)}
-                                  style={styles.commentLikeBtn}
-                                >
-                                  <Ionicons
-                                    name={
-                                      (comment.likedBy || []).includes(currentUser.userId)
-                                        ? "heart"
-                                        : "heart-outline"
-                                    }
-                                    size={16}
-                                    color={
-                                      (comment.likedBy || []).includes(currentUser.userId)
-                                        ? "#ff4f7b"
-                                        : "#999"
-                                    }
-                                  />
-                                  <Text style={styles.commentLikeText}>
-                                    {comment.likes || 0}
-                                  </Text>
-                                </TouchableOpacity>
-                              </View>
+                              </TouchableOpacity>
                             </View>
                           </View>
-                        );
-                      },
-                    )
+                        </View>
+                      );
+                    })
                   )}
                 </View>
               </ScrollView>
@@ -1474,7 +1505,7 @@ const styles = StyleSheet.create({
   emptyBox: {
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 100,
+    marginTop: 128,
   },
   emptyTitle: {
     marginTop: 12,

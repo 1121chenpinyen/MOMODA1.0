@@ -1,0 +1,89 @@
+// plantCatalog: mapping between tags, variants and local assets
+export const ASSET_MAP: Record<string, any[]> = {
+  eat1: [
+    require("../assets/plant/eat1/eat1-1.png"),
+    require("../assets/plant/eat1/eat1-2.png"),
+    require("../assets/plant/eat1/eat1-3.png"),
+    require("../assets/plant/eat1/eat1-4.png"),
+    require("../assets/plant/eat1/eat1-5.png"),
+  ],
+  eat2: [
+    require("../assets/plant/eat2/eat2-1.png"),
+    require("../assets/plant/eat2/eat2-2.png"),
+    require("../assets/plant/eat2/eat2-3.png"),
+    require("../assets/plant/eat2/eat2-4.png"),
+    require("../assets/plant/eat2/eat2-5.png"),
+  ],
+  mood1: [
+    require("../assets/plant/mood1/mood1-1.png"),
+    require("../assets/plant/mood1/mood1-2.png"),
+    require("../assets/plant/mood1/mood1-3.png"),
+    require("../assets/plant/mood1/mood1-4.png"),
+    require("../assets/plant/mood1/mood1-5.png"),
+  ],
+  mood2: [
+    require("../assets/plant/mood2/mood2-1.png"),
+    require("../assets/plant/mood2/mood2-2.png"),
+    require("../assets/plant/mood2/mood2-3.png"),
+    require("../assets/plant/mood2/mood2-4.png"),
+    require("../assets/plant/mood2/mood2-5.png"),
+  ],
+  love1: [
+    require("../assets/plant/love1/love1-1.png"),
+    require("../assets/plant/love1/love1-2.png"),
+    require("../assets/plant/love1/love1-3.png"),
+    require("../assets/plant/love1/love1-4.png"),
+    require("../assets/plant/love1/love1-5.png"),
+  ],
+  love2: [
+    require("../assets/plant/love2/love2-1.png"),
+    require("../assets/plant/love2/love2-2.png"),
+    require("../assets/plant/love2/love2-3.png"),
+    require("../assets/plant/love2/love2-4.png"),
+    require("../assets/plant/love2/love2-5.png"),
+  ],
+  sport1: [
+    require("../assets/plant/sport1/sport1-1.png"),
+    require("../assets/plant/sport1/sport1-2.png"),
+    require("../assets/plant/sport1/sport1-3.png"),
+    require("../assets/plant/sport1/sport1-4.png"),
+    require("../assets/plant/sport1/sport1-5.png"),
+  ],
+  sport2: [
+    require("../assets/plant/sport2/sport2-1.png"),
+    require("../assets/plant/sport2/sport2-2.png"),
+    require("../assets/plant/sport2/sport2-3.png"),
+    require("../assets/plant/sport2/sport2-4.png"),
+    require("../assets/plant/sport2/sport2-5.png"),
+  ],
+};
+
+// 只有這四個分類會自動生成植物，且從對應兩個變體隨機選 1 個
+export const TAG_TO_VARIANTS: Record<string, string[]> = {
+  運動: ["sport1", "sport2"],
+  心情: ["mood1", "mood2"],
+  人際: ["love1", "love2"],
+  飲食: ["eat1", "eat2"],
+};
+
+export const getRandomVariantForTag = (tag: string): string | null => {
+  const variants = TAG_TO_VARIANTS[tag];
+  if (!variants || variants.length === 0) return null;
+  return variants[Math.random() < 0.5 ? 0 : 1];
+};
+
+export const getAssetForPlant = (plant: any) => {
+  if (!plant || !plant.type) return null;
+  const arr = ASSET_MAP[plant.type];
+  if (!arr) return null;
+  const idx = Math.abs(plant.imageIndex || -1) - 1; // 0-based
+  if (idx < 0 || idx >= arr.length) return null;
+  return arr[idx];
+};
+
+export const getFallbackEmoji = (plant: any) => {
+  if (!plant) return "🌱";
+  if ((plant.repliesCount || 0) === 0) return "🌱";
+  if ((plant.repliesCount || 0) < 5) return "🌿";
+  return "🌸";
+};

@@ -123,8 +123,38 @@ export const addSeeds = async (count = 1) => {
   await updateGarden(garden);
 };
 
+// 發文後直接生成對應植物，不消耗種子
+export const createPlantForPost = async (seedType, postId) => {
+  const garden = await getGarden();
+  const seedTemplate = plantsData.find((p) => p.type === seedType);
+  let name = seedType;
+  let rarity = "common";
+  if (seedTemplate) {
+    name = seedTemplate.name;
+    rarity = seedTemplate.rarity || rarity;
+  }
+
+  const newPlant = {
+    id: `plant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    type: seedType,
+    name,
+    rarity,
+    growth: 0,
+    repliesCount: 0,
+    imageIndex: -1, // 使用 -1..-5 表示資源檔的階段
+    locked: false,
+    createdAt: new Date().toISOString(),
+    postId: postId || null,
+  };
+
+  garden.plants.push(newPlant);
+  await updateGarden(garden);
+
+  return newPlant;
+};
+
 // 種植種子（生成新植物）
-export const plantSeed = async (seedType) => {
+export const plantSeed = async (seedType, postId) => {
   const garden = await getGarden();
 
   if (garden.seeds < 1) {
@@ -132,20 +162,24 @@ export const plantSeed = async (seedType) => {
   }
 
   const seedTemplate = plantsData.find((p) => p.type === seedType);
-  if (!seedTemplate) {
-    throw new Error("種子類型不存在");
-  }
-
   garden.seeds -= 1;
+  let name = seedType;
+  let rarity = "common";
+  if (seedTemplate) {
+    name = seedTemplate.name;
+    rarity = seedTemplate.rarity || rarity;
+  }
 
   const newPlant = {
     id: `plant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     type: seedType,
-    name: seedTemplate.name,
-    rarity: seedTemplate.rarity,
+    name,
+    rarity,
     growth: 0, // 成長階段 0-5
     repliesCount: 0, // 收到的回覆數
+    locked: false,
     createdAt: new Date().toISOString(),
+    postId: postId || null, // 關聯的貼文 ID
   };
 
   garden.plants.push(newPlant);
@@ -165,7 +199,12 @@ export const growPlant = async (plantId, increment = 1) => {
 
   plant.repliesCount += increment;
 
-  // 每 5 個回覆成長一階段
+  // 若使用 imageIndex（負數），每收到一個回覆就 -1（例如 -1 -> -2），最小到 -5
+  if (typeof plant.imageIndex === "number") {
+    plant.imageIndex = Math.max(-5, (plant.imageIndex || -1) - increment);
+  }
+
+  // 同時保持舊的 growth 字段（每 5 回覆為一階段）
   plant.growth = Math.min(5, Math.floor(plant.repliesCount / 5));
 
   await updateGarden(garden);
@@ -177,4 +216,12 @@ export const removePlant = async (plantId) => {
   const garden = await getGarden();
   garden.plants = garden.plants.filter((p) => p.id !== plantId);
   await updateGarden(garden);
+};
+
+// 清除花園中所有植物（保留 seeds）
+export const clearAllPlants = async () => {
+  const garden = await getGarden();
+  garden.plants = [];
+  await updateGarden(garden);
+  return garden;
 };
