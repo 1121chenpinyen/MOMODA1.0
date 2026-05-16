@@ -17,6 +17,7 @@ import {
 import FlowerCard from "../../components/FlowerCard";
 import { getFallbackEmoji } from "../../utils/plantCatalog";
 import {
+  clearAllPlants,
   getGarden,
   initGarden,
   removePlant,
@@ -210,7 +211,7 @@ export default function GardenScreen() {
 
   const sortedPlants = [...(garden.plants || [])].sort(
     (a: any, b: any) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   );
 
   return (
@@ -222,7 +223,33 @@ export default function GardenScreen() {
           <Text style={styles.seedCountText}>{sortedPlants.length}</Text>
         </View>
         <Text style={styles.title}>花園</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          style={{ width: 40 }}
+          onPress={() => {
+            Alert.alert("清除所有植物", "確定要刪除花園中的所有植物嗎？", [
+              { text: "取消", style: "cancel" },
+              {
+                text: "確認刪除",
+                style: "destructive",
+                onPress: async () => {
+                  try {
+                    await clearAllPlants();
+                    await loadGarden();
+                    Alert.alert("成功", "已清除所有植物");
+                  } catch (e) {
+                    Alert.alert("錯誤", "清除失敗");
+                  }
+                },
+              },
+            ]);
+          }}
+        >
+          <MaterialCommunityIcons
+            name="trash-can-outline"
+            size={24}
+            color="#e53935"
+          />
+        </TouchableOpacity>
       </View>
 
       {/* 空花園提示 */}
@@ -244,7 +271,7 @@ export default function GardenScreen() {
             setGardenAreaHeight(event.nativeEvent.layout.height);
           }}
         >
-          {sortedPlants.map((plant) => {
+          {sortedPlants.map((plant, index) => {
             const pos = plantPositions[plant.id] || { x: 0, y: 0 };
             const panResponder = createPanResponder(plant.id);
             const isLocked = lockedPlants.has(plant.id);
@@ -257,6 +284,7 @@ export default function GardenScreen() {
                   {
                     left: pos.x,
                     top: pos.y,
+                    zIndex: index,
                   },
                 ]}
                 onPress={() => {

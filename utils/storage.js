@@ -112,7 +112,16 @@ export const getGarden = async () => {
 // 更新花園數據
 export const updateGarden = async (newData) => {
   const garden = await getGarden();
-  const updated = { ...garden, ...newData };
+  const updated = {
+    ...garden,
+    ...newData,
+    // 確保 plants 和 positions 被正確合併
+    plants: newData.plants !== undefined ? newData.plants : garden.plants,
+    positions:
+      newData.positions !== undefined
+        ? newData.positions
+        : garden.positions || {},
+  };
   await AsyncStorage.setItem("garden", JSON.stringify(updated));
 };
 
@@ -126,13 +135,23 @@ export const addSeeds = async (count = 1) => {
 // 發文後直接生成對應植物，不消耗種子
 export const createPlantForPost = async (seedType, postId) => {
   const garden = await getGarden();
-  const seedTemplate = plantsData.find((p) => p.type === seedType);
-  let name = seedType;
+
+  // 為各個植物類型映射合適的名稱
+  const typeNameMap = {
+    eat1: "進食植物 1",
+    eat2: "進食植物 2",
+    mood1: "心情植物 1",
+    mood2: "心情植物 2",
+    love1: "人際植物 1",
+    love2: "人際植物 2",
+    sport1: "運動植物 1",
+    sport2: "運動植物 2",
+    entertainment1: "娛樂植物 1",
+    entertainment2: "娛樂植物 2",
+  };
+
+  let name = typeNameMap[seedType] || seedType;
   let rarity = "common";
-  if (seedTemplate) {
-    name = seedTemplate.name;
-    rarity = seedTemplate.rarity || rarity;
-  }
 
   const newPlant = {
     id: `plant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -141,14 +160,23 @@ export const createPlantForPost = async (seedType, postId) => {
     rarity,
     growth: 0,
     repliesCount: 0,
-    imageIndex: -1, // 使用 -1..-5 表示資源檔的階段
+    imageIndex: -1,
     locked: false,
     createdAt: new Date().toISOString(),
     postId: postId || null,
   };
 
   garden.plants.push(newPlant);
-  await updateGarden(garden);
+
+  // 為新植物分配初始位置
+  const positions = garden.positions || {};
+  const plantCount = garden.plants.length;
+  positions[newPlant.id] = {
+    x: ((plantCount - 1) % 2) * 180 + 40,
+    y: Math.floor((plantCount - 1) / 2) * 120 + 200,
+  };
+
+  await updateGarden({ ...garden, positions });
 
   return newPlant;
 };

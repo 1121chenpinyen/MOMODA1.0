@@ -56,20 +56,58 @@ export const ASSET_MAP: Record<string, any[]> = {
     require("../assets/plant/sport2/sport2-4.png"),
     require("../assets/plant/sport2/sport2-5.png"),
   ],
+  entertainment1: [
+    require("../assets/plant/entertainment1/entertainment1-1.png"),
+    require("../assets/plant/entertainment1/entertainment1-2.png"),
+    require("../assets/plant/entertainment1/entertainment1-3.png"),
+    require("../assets/plant/entertainment1/entertainment1-4.png"),
+    require("../assets/plant/entertainment1/entertainment1-5.png"),
+  ],
+  entertainment2: [
+    require("../assets/plant/entertainment2/entertainment2-1.png"),
+    require("../assets/plant/entertainment2/entertainment2-2.png"),
+    require("../assets/plant/entertainment2/entertainment2-3.png"),
+    require("../assets/plant/entertainment2/entertainment2-4.png"),
+    require("../assets/plant/entertainment2/entertainment2-5.png"),
+  ],
 };
 
-// 只有這四個分類會自動生成植物，且從對應兩個變體隨機選 1 個
+// 這些分類會自動生成植物，且從對應兩個變體隨機選 1 個
 export const TAG_TO_VARIANTS: Record<string, string[]> = {
   運動: ["sport1", "sport2"],
   心情: ["mood1", "mood2"],
   人際: ["love1", "love2"],
   飲食: ["eat1", "eat2"],
+  娛樂: ["entertainment1", "entertainment2"],
+  "學業/工作": ["mood1", "mood2"],
+  寵物: ["entertainment1", "entertainment2"],
+  金錢: ["sport1", "sport2"],
+  自我成長: ["love1", "love2"],
+  其他: ["eat1", "eat2"],
+};
+
+const getRandomIndex = (length: number): number => {
+  if (length <= 0) return -1;
+
+  const cryptoSource = globalThis.crypto as
+    | {
+        getRandomValues?: (array: Uint32Array) => Uint32Array;
+      }
+    | undefined;
+
+  if (cryptoSource?.getRandomValues) {
+    const values = new Uint32Array(1);
+    cryptoSource.getRandomValues(values);
+    return values[0] % length;
+  }
+
+  return Math.floor(Math.random() * length);
 };
 
 export const getRandomVariantForTag = (tag: string): string | null => {
   const variants = TAG_TO_VARIANTS[tag];
   if (!variants || variants.length === 0) return null;
-  return variants[Math.random() < 0.5 ? 0 : 1];
+  return variants[getRandomIndex(variants.length)];
 };
 
 export const getAssetForPlant = (plant: any) => {
