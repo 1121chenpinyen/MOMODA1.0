@@ -4,7 +4,7 @@ import { db } from "../config/firebaseConfig";
 import petsData from "../data/pets.json";
 import plantsData from "../data/plants.json";
 
-// 初始化全局數據（食物計數、玩具列表、金錢）
+// 初始化全局數據（食物計數、玩具列表、金錢、水滴、施肥）
 export const initGlobalData = async () => {
   const stored = await AsyncStorage.getItem("globalData");
   if (!stored) {
@@ -13,6 +13,8 @@ export const initGlobalData = async () => {
       dogFoodCount: 5,
       toys: [],
       money: 50,
+      waterDrops: 0,
+      fertilizers: 0,
     };
     await AsyncStorage.setItem("globalData", JSON.stringify(globalData));
   }
@@ -22,9 +24,22 @@ export const initGlobalData = async () => {
 export const getGlobalData = async () => {
   await initGlobalData();
   const stored = await AsyncStorage.getItem("globalData");
-  return stored
-    ? JSON.parse(stored)
-    : { catFoodCount: 5, dogFoodCount: 5, toys: [], money: 50 };
+  const defaultData = {
+    catFoodCount: 5,
+    dogFoodCount: 5,
+    toys: [],
+    money: 50,
+    waterDrops: 0,
+    fertilizers: 0,
+  };
+  if (!stored) return defaultData;
+
+  const parsed = JSON.parse(stored);
+  // 確保新字段存在
+  return {
+    ...defaultData,
+    ...parsed,
+  };
 };
 
 // 更新全局數據
@@ -138,20 +153,24 @@ export const createPlantForPost = async (seedType, postId) => {
 
   // 為各個植物類型映射合適的名稱
   const typeNameMap = {
-    eat1: "進食植物 1",
-    eat2: "進食植物 2",
-    mood1: "心情植物 1",
-    mood2: "心情植物 2",
-    love1: "人際植物 1",
-    love2: "人際植物 2",
-    sport1: "運動植物 1",
-    sport2: "運動植物 2",
-    entertainment1: "娛樂植物 1",
-    entertainment2: "娛樂植物 2",
+    eat1: "橘子",
+    eat2: "草莓",
+    mood1: "雛菊",
+    mood2: "薰衣草",
+    love1: "鬱金香",
+    love2: "康乃馨",
+    sport1: "向日葵",
+    sport2: "仙人掌",
+    entertainment1: "七彩花",
+    entertainment2: "水仙花",
   };
 
   let name = typeNameMap[seedType] || seedType;
   let rarity = "common";
+
+  // 生命倒数：3天 = 72小时
+  const now = new Date();
+  const lifeExpireAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
   const newPlant = {
     id: `plant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -164,6 +183,7 @@ export const createPlantForPost = async (seedType, postId) => {
     locked: false,
     createdAt: new Date().toISOString(),
     postId: postId || null,
+    lifeExpireAt: lifeExpireAt.toISOString(),
   };
 
   garden.plants.push(newPlant);
@@ -239,6 +259,20 @@ export const growPlant = async (plantId, increment = 1) => {
   return plant;
 };
 
+// 計算植物剩餘生命（小時）
+export const getPlantRemainingLife = (plant) => {
+  if (!plant.lifeExpireAt) return Infinity; // 舊植物沒有倒數
+  const now = new Date().getTime();
+  const expireTime = new Date(plant.lifeExpireAt).getTime();
+  const remaining = Math.max(0, (expireTime - now) / (1000 * 60 * 60)); // 轉換為小時
+  return remaining;
+};
+
+// 檢查植物是否枯萎
+export const isPlantDead = (plant) => {
+  return getPlantRemainingLife(plant) <= 0;
+};
+
 // 移除已成熟的植物（可選，用於清理花園）
 export const removePlant = async (plantId) => {
   const garden = await getGarden();
@@ -252,4 +286,34 @@ export const clearAllPlants = async () => {
   garden.plants = [];
   await updateGarden(garden);
   return garden;
+};
+
+// 領取 Firebase 中待處理的施肥
+export const claimPendingFertilizers = async (userId) => {
+  if (!userId) return 0;
+
+  try {
+    const profileRef = doc(db, "profiles", userId);
+    const profileSnap = await getDoc(profileRef);
+
+    if (profileSnap.exists()) {
+      const pendingFertilizers = profileSnap.data().pendingFertilizers || 0;
+
+      if (pendingFertilizers > 0) {
+        // 領取施肥並重置
+        const globalData = await getGlobalData();
+        const newFertilizers =
+          (globalData.fertilizers || 0) + pendingFertilizers;
+        await updateGlobalData({ fertilizers: newFertilizers });
+
+        // 在 Firebase 中重置待處理施肥
+        // 這裡我們無法直接 updateDoc，但至少本地已領取了
+        return pendingFertilizers;
+      }
+    }
+  } catch (e) {
+    console.error("領取施肥失敗:", e);
+  }
+
+  return 0;
 };

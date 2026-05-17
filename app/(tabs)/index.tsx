@@ -2,40 +2,46 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  increment,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    increment,
+    onSnapshot,
+    orderBy,
+    query,
+    serverTimestamp,
+    updateDoc,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
 import { getRandomVariantForTag } from "../../utils/plantCatalog";
-import { createPlantForPost, getGarden, growPlant } from "../../utils/storage";
+import {
+    createPlantForPost,
+    getGarden,
+    getGlobalData,
+    growPlant,
+    updateGlobalData,
+} from "../../utils/storage";
 
 const TAGS = [
   "心情",
@@ -155,6 +161,24 @@ export default function HomeScreen() {
       await updateDoc(doc(db, "posts", selectedPost.id), {
         comments: updatedComments,
       });
+
+      // 當帖子作者給留言點愛心時，給留言作者 +1 施肥
+      const comment = updatedComments.find((c: any) => c.id === commentId);
+      if (
+        comment &&
+        selectedPost.authorId === currentUser.userId &&
+        !comment.likedBy.includes(currentUser.userId) === false
+      ) {
+        // 帖子作者新增爱心（从 false 变成 true），记录这个事件
+        try {
+          // 在 Firestore 中记录施肥奖励
+          await updateDoc(doc(db, "profiles", comment.userId), {
+            pendingFertilizers: increment(1),
+          });
+        } catch (e) {
+          console.error("記錄施肥失敗:", e);
+        }
+      }
 
       setSelectedPost({
         ...selectedPost,
@@ -470,6 +494,11 @@ export default function HomeScreen() {
             await growPlant(plant.id, 1);
           }
         }
+
+        // 回覆他人貼文時 +3 水滴
+        const globalData = await getGlobalData();
+        const newWaterDrops = (globalData.waterDrops || 0) + 3;
+        await updateGlobalData({ waterDrops: newWaterDrops });
       } catch (gardenError) {
         console.error("更新花園成長失敗:", gardenError);
       }
