@@ -41,10 +41,10 @@ export default function ProfilePage() {
 
   // 數據統計狀態
   const [stats, setStats] = useState({
-    sentMessages: 20, // 我的小煩惱 (chat count)
-    receivedHearts: 10, // 收到的愛心 (total likes on my replies)
-    sentReplies: 0, // 給出的回覆 (replies I sent)
-    receivedReplies: 20, // 收到的回覆 (replies to my messages)
+    sentPosts: 0,
+    sentComments: 0,
+    receivedPostLikes: 0,
+    receivedCommentLikes: 0,
   });
 
   useEffect(() => {
@@ -54,38 +54,44 @@ export default function ProfilePage() {
   // 抓取統計數據邏輯 (符合 index 命名)
   const fetchUserStats = async (id: string) => {
     try {
-      // 1. 我的小煩惱 (chat 集合中 deviceId 是我的)
-      const qMsg = query(collection(db, "chat"), where("deviceId", "==", id));
-      const snapMsg = await getDocs(qMsg);
+      const qPosts = query(collection(db, "posts"));
+      const snapPosts = await getDocs(qPosts);
 
-      // 2. 給出的回覆 (replies 集合中 fromDeviceId 是我的)
+      // 2. 舊版留言資料 (replies 集合中 fromDeviceId 是我的)
       const qMyReplies = query(
         collection(db, "replies"),
         where("fromDeviceId", "==", id),
       );
       const snapMyReplies = await getDocs(qMyReplies);
 
-      // 3. 收到的回覆 (replies 集合中 toDeviceId 是我的)
-      const qReceivedReplies = query(
-        collection(db, "replies"),
-        where("toDeviceId", "==", id),
-      );
-      const snapReceivedReplies = await getDocs(qReceivedReplies);
+      let sentPosts = 0;
+      let sentComments = snapMyReplies.size;
+      let receivedPostLikes = 0;
+      let receivedCommentLikes = 0;
 
-      // 4. 收到的愛心 (計算自己發出的 reply 獲得的 likedBy 總數)
-      let totalHearts = 0;
-      snapMyReplies.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data.likedBy && Array.isArray(data.likedBy)) {
-          totalHearts += data.likedBy.length;
+      snapPosts.forEach((docSnap) => {
+        const post = docSnap.data();
+        const isMyPost = post.authorId === id || post.deviceId === id;
+
+        if (isMyPost) {
+          sentPosts += 1;
+          receivedPostLikes += post.likes || 0;
         }
+
+        const comments = Array.isArray(post.comments) ? post.comments : [];
+        comments.forEach((comment: any) => {
+          if (comment.userId === id) {
+            sentComments += 1;
+            receivedCommentLikes += comment.likes || 0;
+          }
+        });
       });
 
       setStats({
-        sentMessages: snapMsg.size,
-        receivedHearts: totalHearts,
-        sentReplies: snapMyReplies.size,
-        receivedReplies: snapReceivedReplies.size,
+        sentPosts,
+        sentComments,
+        receivedPostLikes,
+        receivedCommentLikes,
       });
     } catch (e) {
       console.error("[Profile] Stats error:", e);
@@ -133,6 +139,22 @@ export default function ProfilePage() {
       const storageRef = ref(storage, filename);
       await uploadBytes(storageRef, blob);
       const url = await getDownloadURL(storageRef);
+      // 確保 pendingFertilizers 欄位存在（若不存在則初始化為 0）
+      try {
+        const profileRef = doc(collection(db, "profiles"), deviceId);
+        const profileSnap = await getDoc(profileRef);
+        if (profileSnap.exists()) {
+          const data = profileSnap.data();
+          if (data.pendingFertilizers === undefined) {
+            await setDoc(profileRef, { pendingFertilizers: 0 }, { merge: true });
+          }
+        } else {
+          await setDoc(profileRef, { pendingFertilizers: 0 }, { merge: true });
+        }
+      } catch (e) {
+        console.error("初始化 pendingFertilizers 失敗:", e);
+      }
+
       await setDoc(
         doc(collection(db, "profiles"), deviceId),
         { avatarUrl: url },
@@ -169,6 +191,21 @@ export default function ProfilePage() {
     try {
       await AsyncStorage.setItem("userId", newId);
       if (deviceId) {
+        try {
+          const profileRef = doc(collection(db, "profiles"), deviceId);
+          const profileSnap = await getDoc(profileRef);
+          if (profileSnap.exists()) {
+            const data = profileSnap.data();
+            if (data.pendingFertilizers === undefined) {
+              await setDoc(profileRef, { pendingFertilizers: 0 }, { merge: true });
+            }
+          } else {
+            await setDoc(profileRef, { pendingFertilizers: 0 }, { merge: true });
+          }
+        } catch (e) {
+          console.error("初始化 pendingFertilizers 失敗:", e);
+        }
+
         await setDoc(
           doc(collection(db, "profiles"), deviceId),
           { userId: newId },
@@ -245,24 +282,24 @@ export default function ProfilePage() {
         {/* 數據卡片 1：小煩惱 & 愛心 */}
         <View style={styles.statBox}>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>我的小煩惱</Text>
-            <Text style={styles.statValue}>{stats.sentMessages}</Text>
+            <Text style={styles.statLabel}>發文數</Text>
+            <Text style={styles.statValue}>{stats.sentPosts}</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>收到的愛心</Text>
-            <Text style={styles.statValue}>{stats.receivedHearts}</Text>
+            <Text style={styles.statLabel}>留言數</Text>
+            <Text style={styles.statValue}>{stats.sentComments}</Text>
           </View>
         </View>
 
         {/* 數據卡片 2：給出回覆 & 收到回覆 */}
         <View style={styles.statBox}>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>給出的回覆</Text>
-            <Text style={styles.statValue}>{stats.sentReplies}</Text>
+            <Text style={styles.statLabel}>收到貼文讚</Text>
+            <Text style={styles.statValue}>{stats.receivedPostLikes}</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>收到的回覆</Text>
-            <Text style={styles.statValue}>{stats.receivedReplies}</Text>
+            <Text style={styles.statLabel}>收到留言讚</Text>
+            <Text style={styles.statValue}>{stats.receivedCommentLikes}</Text>
           </View>
         </View>
       </View>

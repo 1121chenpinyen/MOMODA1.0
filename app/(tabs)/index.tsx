@@ -12,6 +12,7 @@ import {
     query,
     serverTimestamp,
     updateDoc,
+    where
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useEffect, useMemo, useState } from "react";
@@ -36,6 +37,8 @@ import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
 import { getRandomVariantForTag } from "../../utils/plantCatalog";
 import {
+    claimPendingPlantGrowth,
+    claimPendingRewardsOnce,
     createPlantForPost,
     getGarden,
     getGlobalData,
@@ -95,6 +98,7 @@ type PostType = {
   savedBy?: string[];
   createdAt?: any;
   authorId?: string;
+  deviceId?: string;
   authorName?: string;
   authorAvatar?: string;
 };
@@ -142,54 +146,89 @@ export default function HomeScreen() {
   const handleLikeComment = async (commentId: string) => {
     if (!selectedPost || !currentUser.userId) return;
 
+    // 先找出原本的留言與按讚狀態，以判斷這次操作是新增還是取消按讚
+    const originalComment = (selectedPost.comments || []).find(
+      (c: any) => c.id === commentId,
+    );
+    const previouslyLiked = originalComment?.likedBy?.includes(
+      currentUser.userId,
+    );
+
     const updatedComments = (selectedPost.comments || []).map((c: any) => {
       if (c.id !== commentId) return c;
 
       const likedBy = c.likedBy || [];
       const hasLiked = likedBy.includes(currentUser.userId);
+      const isNewAuthorLike =
+        !hasLiked &&
+        selectedPost.authorId === currentUser.userId &&
+        c.userId !== currentUser.userId;
 
-      return {
+      const nextComment = {
         ...c,
         likes: (c.likes || 0) + (hasLiked ? -1 : 1),
         likedBy: hasLiked
           ? likedBy.filter((id: string) => id !== currentUser.userId)
           : [...likedBy, currentUser.userId],
       };
+
+      return nextComment;
     });
 
     try {
+      let fertilizerRewardCreated = false;
+      const likedComment = updatedComments.find((c: any) => c.id === commentId);
+      const shouldCreateReward =
+        likedComment &&
+        selectedPost.authorId === currentUser.userId &&
+        likedComment.userId !== currentUser.userId &&
+        !previouslyLiked &&
+        !likedComment.fertilizerRewardClaimed &&
+        (!Array.isArray(likedComment.fertilizerRewards) ||
+          likedComment.fertilizerRewards.length === 0);
+
+      const finalComments = shouldCreateReward
+        ? updatedComments.map((comment: any) => {
+            if (comment.id !== commentId) return comment;
+
+            const existingRewards = Array.isArray(comment.fertilizerRewards)
+              ? comment.fertilizerRewards
+              : [];
+
+            return {
+              ...comment,
+              fertilizerRewards: [
+                ...existingRewards,
+                {
+                  id: `reward_${selectedPost.id}_${commentId}_${Date.now()}`,
+                  claimedBy: [],
+                  createdAt: new Date().toISOString(),
+                },
+              ],
+            };
+          })
+        : updatedComments;
+
       await updateDoc(doc(db, "posts", selectedPost.id), {
-        comments: updatedComments,
+        comments: finalComments,
       });
 
-      // 當帖子作者給留言點愛心時，給留言作者 +1 施肥
-      const comment = updatedComments.find((c: any) => c.id === commentId);
-      if (
-        comment &&
-        selectedPost.authorId === currentUser.userId &&
-        !comment.likedBy.includes(currentUser.userId) === false
-      ) {
-        // 帖子作者新增爱心（从 false 变成 true），记录这个事件
-        try {
-          // 在 Firestore 中记录施肥奖励
-          await updateDoc(doc(db, "profiles", comment.userId), {
-            pendingFertilizers: increment(1),
-          });
-        } catch (e) {
-          console.error("記錄施肥失敗:", e);
-        }
-      }
+      fertilizerRewardCreated = shouldCreateReward;
 
       setSelectedPost({
         ...selectedPost,
-        comments: updatedComments,
+        comments: finalComments,
       });
-    } catch {
+
+      // 不再顯示「已送出施肥獎勵」的跳窗，以免干擾使用者體驗
+    } catch (e) {
+      console.error(e);
       Alert.alert("錯誤", "留言按讚失敗");
     }
   };
   useEffect(() => {
     let unsubscribeProfile: (() => void) | undefined;
+    let unsubscribePendingGrowth: (() => void) | undefined;
 
     const initUser = async () => {
       try {
@@ -214,6 +253,58 @@ export default function HomeScreen() {
             });
           }
         });
+
+        // 順便在首頁檢查並領取待處理的成長與資源，讓作者能更快看到變化
+        try {
+          const total = await claimPendingRewardsOnce(deviceId);
+          if (total > 0) {
+            Alert.alert(
+              "獎勵已領取",
+              `已領取 ${total} 項待處理獎勵。請到花園確認成長。`,
+            );
+          }
+        } catch (e) {
+          console.error("首頁領取待處理獎勵失敗:", e);
+        }
+
+        // 🌱 實時監聽該使用者的貼文 pendingGrowth
+        // 當別人留言時，Firestore 會更新 posts.pendingGrowth
+        // 這裡監聽該值的變化，自動領取並推送到本地花園
+        const userPostsRef = query(
+          collection(db, "posts"),
+          where("authorId", "==", deviceId),
+        );
+        unsubscribePendingGrowth = onSnapshot(
+          userPostsRef,
+          async (snapshot) => {
+            let totalGrowth = 0;
+
+            for (const postSnap of snapshot.docs) {
+              const pendingGrowth = postSnap.data().pendingGrowth || 0;
+              if (pendingGrowth > 0) {
+                totalGrowth += pendingGrowth;
+              }
+            }
+
+            if (totalGrowth > 0) {
+              console.log("實時偵測到待成長:", totalGrowth, "準備領取...");
+
+              try {
+                const claimed = await claimPendingPlantGrowth(deviceId);
+                console.log("實時領取成長完成，領取數:", claimed);
+
+                if (claimed > 0) {
+                  Alert.alert(
+                    "🌱 植物在成長",
+                    `有人回覆了你的貼文！你的植物獲得 ${claimed} 次成長。`,
+                  );
+                }
+              } catch (e) {
+                console.error("實時領取成長失敗:", e);
+              }
+            }
+          },
+        );
       } catch (error) {
         console.log("監聽使用者資料失敗:", error);
       }
@@ -224,6 +315,9 @@ export default function HomeScreen() {
     return () => {
       if (unsubscribeProfile) {
         unsubscribeProfile();
+      }
+      if (unsubscribePendingGrowth) {
+        unsubscribePendingGrowth();
       }
     };
   }, []);
@@ -467,6 +561,8 @@ export default function HomeScreen() {
 
     try {
       const oldComments = selectedPost.comments || [];
+      const postOwnerId =
+        selectedPost.authorId || selectedPost.deviceId || null;
 
       const newComment: CommentType = {
         id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -488,11 +584,18 @@ export default function HomeScreen() {
       try {
         const garden = await getGarden();
 
-        // 只增長與該貼文相關的植物
-        for (const plant of garden.plants || []) {
-          if (plant.postId === selectedPost.id) {
-            await growPlant(plant.id, 1);
+        // 自己留言自己的貼文：直接讓本機花園立刻成長
+        // 別人留言你的貼文：把成長寫到貼文上，讓作者之後領取
+        if (postOwnerId && postOwnerId === currentUser.userId) {
+          for (const plant of garden.plants || []) {
+            if (plant.postId === selectedPost.id) {
+              await growPlant(plant.id, 1);
+            }
           }
+        } else if (selectedPost.id) {
+          await updateDoc(doc(db, "posts", selectedPost.id), {
+            pendingGrowth: increment(1),
+          });
         }
 
         // 回覆他人貼文時 +3 水滴

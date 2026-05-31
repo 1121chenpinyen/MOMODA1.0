@@ -1,6 +1,7 @@
 // plantCatalog: mapping between tags, variants and local assets
 export const ASSET_MAP: Record<string, any[]> = {
   eat1: [
+    require("../assets/plant/eat1/tu.png"),
     require("../assets/plant/eat1/eat1-1.png"),
     require("../assets/plant/eat1/eat1-2.png"),
     require("../assets/plant/eat1/eat1-3.png"),
@@ -8,6 +9,7 @@ export const ASSET_MAP: Record<string, any[]> = {
     require("../assets/plant/eat1/eat1-5.png"),
   ],
   eat2: [
+    require("../assets/plant/eat2/tu.png"),
     require("../assets/plant/eat2/eat2-1.png"),
     require("../assets/plant/eat2/eat2-2.png"),
     require("../assets/plant/eat2/eat2-3.png"),
@@ -15,6 +17,7 @@ export const ASSET_MAP: Record<string, any[]> = {
     require("../assets/plant/eat2/eat2-5.png"),
   ],
   mood1: [
+    require("../assets/plant/mood1/tu.png"),
     require("../assets/plant/mood1/mood1-1.png"),
     require("../assets/plant/mood1/mood1-2.png"),
     require("../assets/plant/mood1/mood1-3.png"),
@@ -22,6 +25,7 @@ export const ASSET_MAP: Record<string, any[]> = {
     require("../assets/plant/mood1/mood1-5.png"),
   ],
   mood2: [
+    require("../assets/plant/mood2/tu.png"),
     require("../assets/plant/mood2/mood2-1.png"),
     require("../assets/plant/mood2/mood2-2.png"),
     require("../assets/plant/mood2/mood2-3.png"),
@@ -29,6 +33,7 @@ export const ASSET_MAP: Record<string, any[]> = {
     require("../assets/plant/mood2/mood2-5.png"),
   ],
   love1: [
+    require("../assets/plant/love1/tu.png"),
     require("../assets/plant/love1/love1-1.png"),
     require("../assets/plant/love1/love1-2.png"),
     require("../assets/plant/love1/love1-3.png"),
@@ -36,6 +41,7 @@ export const ASSET_MAP: Record<string, any[]> = {
     require("../assets/plant/love1/love1-5.png"),
   ],
   love2: [
+    require("../assets/plant/love2/tu.png"),
     require("../assets/plant/love2/love2-1.png"),
     require("../assets/plant/love2/love2-2.png"),
     require("../assets/plant/love2/love2-3.png"),
@@ -43,6 +49,7 @@ export const ASSET_MAP: Record<string, any[]> = {
     require("../assets/plant/love2/love2-5.png"),
   ],
   sport1: [
+    require("../assets/plant/sport1/tu.png"),
     require("../assets/plant/sport1/sport1-1.png"),
     require("../assets/plant/sport1/sport1-2.png"),
     require("../assets/plant/sport1/sport1-3.png"),
@@ -50,6 +57,7 @@ export const ASSET_MAP: Record<string, any[]> = {
     require("../assets/plant/sport1/sport1-5.png"),
   ],
   sport2: [
+    require("../assets/plant/sport2/tu.png"),
     require("../assets/plant/sport2/sport2-1.png"),
     require("../assets/plant/sport2/sport2-2.png"),
     require("../assets/plant/sport2/sport2-3.png"),
@@ -57,6 +65,7 @@ export const ASSET_MAP: Record<string, any[]> = {
     require("../assets/plant/sport2/sport2-5.png"),
   ],
   entertainment1: [
+    require("../assets/plant/entertainment1/tu.png"),
     require("../assets/plant/entertainment1/entertainment1-1.png"),
     require("../assets/plant/entertainment1/entertainment1-2.png"),
     require("../assets/plant/entertainment1/entertainment1-3.png"),
@@ -64,11 +73,28 @@ export const ASSET_MAP: Record<string, any[]> = {
     require("../assets/plant/entertainment1/entertainment1-5.png"),
   ],
   entertainment2: [
+    require("../assets/plant/entertainment2/tu.png"),
     require("../assets/plant/entertainment2/entertainment2-1.png"),
     require("../assets/plant/entertainment2/entertainment2-2.png"),
     require("../assets/plant/entertainment2/entertainment2-3.png"),
     require("../assets/plant/entertainment2/entertainment2-4.png"),
     require("../assets/plant/entertainment2/entertainment2-5.png"),
+  ],
+  pet1: [
+    require("../assets/plant/pet1/tu.png"),
+    require("../assets/plant/pet1/pet2-1.png"),
+    require("../assets/plant/pet1/pet2-2.png"),
+    require("../assets/plant/pet1/pet2-3.png"),
+    require("../assets/plant/pet1/pet2-4.png"),
+    require("../assets/plant/pet1/pet2-5.png"),
+  ],
+  pet2: [
+    require("../assets/plant/pet2/tu.png"),
+    require("../assets/plant/pet2/pet1-1.png"),
+    require("../assets/plant/pet2/pet1-2.png"),
+    require("../assets/plant/pet2/pet1-3.png"),
+    require("../assets/plant/pet2/pet1-4.png"),
+    require("../assets/plant/pet2/pet1-5.png"),
   ],
 };
 
@@ -80,7 +106,7 @@ export const TAG_TO_VARIANTS: Record<string, string[]> = {
   飲食: ["eat1", "eat2"],
   娛樂: ["entertainment1", "entertainment2"],
   "學業/工作": ["mood1", "mood2"],
-  寵物: ["entertainment1", "entertainment2"],
+  寵物: ["pet1", "pet2"],
   金錢: ["sport1", "sport2"],
   自我成長: ["love1", "love2"],
   其他: ["eat1", "eat2"],

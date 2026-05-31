@@ -1,8 +1,114 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  updateDoc,
+} from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import petsData from "../data/pets.json";
 import plantsData from "../data/plants.json";
+
+import { Dimensions } from "react-native";
+
+const gardenChangeListeners = new Set();
+
+const emitGardenChange = () => {
+  for (const listener of gardenChangeListeners) {
+    try {
+      listener();
+    } catch (error) {
+      console.error("通知花園更新失敗:", error);
+    }
+  }
+};
+
+const getGardenWidth = () => Dimensions.get("window").width;
+const getGardenHeight = () => Dimensions.get("window").height;
+
+const getUnlockedZoneCount = (plantCount) => {
+  if (plantCount >= 100) return 3;
+  if (plantCount >= 50) return 2;
+  return 1;
+};
+
+const getAllowedZoneIndexes = (zoneCount) => {
+  if (zoneCount === 1) return [1];
+  if (zoneCount === 2) return [1, 0];
+  return [1, 0, 2];
+};
+
+const getZoneIndexForPosition = (position) => {
+  if (!position || typeof position.x !== "number") return 1;
+  const zoneWidth = getGardenWidth();
+  return Math.max(0, Math.min(2, Math.floor(position.x / zoneWidth)));
+};
+
+const buildPlantPosition = (zoneIndex, slotIndex) => {
+  const zoneWidth = getGardenWidth();
+  const zoneHeight = getGardenHeight();
+  const zoneStartX = zoneIndex * zoneWidth;
+  const maxRows = Math.max(3, Math.floor((zoneHeight - 280) / 140));
+  const col = Math.floor(slotIndex / maxRows) % 2;
+  const row = slotIndex % maxRows;
+
+  return {
+    x: zoneStartX + col * 180 + 40,
+    y: row * 140 + 180,
+  };
+};
+
+// 限制生成位置，避免跑出畫面（預設上限 450）
+const clampGeneratedPosition = (pos, maxX = 450, maxY = 450) => {
+  if (!pos) return { x: 40, y: 180 };
+  return {
+    x: Math.max(0, Math.min(maxX, Math.round(pos.x))),
+    y: Math.max(0, Math.min(maxY, Math.round(pos.y))),
+  };
+};
+
+// 生成在目前可見中區的安全位置，避免新植物一出生就落到畫面外
+const getVisibleSpawnPosition = (zoneIndex = 1, slotIndex = 0) => {
+  const zoneWidth = getGardenWidth();
+  const zoneHeight = getGardenHeight();
+  const zoneStartX = zoneIndex * zoneWidth;
+
+  const xOffsets = [40, 220];
+  const yOffsets = [160, 300];
+
+  const x = zoneStartX + xOffsets[slotIndex % xOffsets.length];
+  const y = yOffsets[Math.floor(slotIndex / xOffsets.length) % yOffsets.length];
+
+  return {
+    x: Math.min(zoneStartX + zoneWidth - 160, x),
+    y: Math.min(zoneHeight - 160, y),
+  };
+};
+
+const pickPlantZone = (garden) => {
+  const zoneCount = getUnlockedZoneCount((garden.plants || []).length);
+  const allowedZones = getAllowedZoneIndexes(zoneCount);
+  const positions = garden.positions || {};
+
+  const zoneLoad = allowedZones.map((zoneIndex) => ({
+    zoneIndex,
+    count: (garden.plants || []).filter((plant) => {
+      const position = positions[plant.id];
+      return getZoneIndexForPosition(position) === zoneIndex;
+    }).length,
+  }));
+
+  zoneLoad.sort((a, b) => a.count - b.count);
+  return zoneLoad[0]?.zoneIndex ?? 1;
+};
+export const subscribeGardenChanges = (listener) => {
+  gardenChangeListeners.add(listener);
+
+  return () => {
+    gardenChangeListeners.delete(listener);
+  };
+};
 
 // 初始化全局數據（食物計數、玩具列表、金錢、水滴、施肥）
 export const initGlobalData = async () => {
@@ -46,6 +152,12 @@ export const getGlobalData = async () => {
 export const updateGlobalData = async (newData) => {
   const globalData = await getGlobalData();
   const updated = { ...globalData, ...newData };
+  if (typeof updated.waterDrops === "number") {
+    updated.waterDrops = Math.max(0, Math.min(30, updated.waterDrops));
+  }
+  if (typeof updated.fertilizers === "number") {
+    updated.fertilizers = Math.max(0, Math.min(30, updated.fertilizers));
+  }
   await AsyncStorage.setItem("globalData", JSON.stringify(updated));
 };
 
@@ -112,6 +224,7 @@ export const initGarden = async () => {
     const garden = {
       seeds: 0, // 種子數量
       plants: [], // 已種植的植物
+      layoutVersion: 2,
     };
     await AsyncStorage.setItem("garden", JSON.stringify(garden));
   }
@@ -137,7 +250,14 @@ export const updateGarden = async (newData) => {
         ? newData.positions
         : garden.positions || {},
   };
+  // 標記最後修改時間，便於前端檢查變更
+  try {
+    updated.lastModified = new Date().toISOString();
+  } catch (e) {
+    // ignore
+  }
   await AsyncStorage.setItem("garden", JSON.stringify(updated));
+  emitGardenChange();
 };
 
 // 添加種子（發布貼文時調用）
@@ -163,6 +283,8 @@ export const createPlantForPost = async (seedType, postId) => {
     sport2: "仙人掌",
     entertainment1: "七彩花",
     entertainment2: "水仙花",
+    pet1: "寵物花 1",
+    pet2: "寵物花 2",
   };
 
   let name = typeNameMap[seedType] || seedType;
@@ -190,13 +312,38 @@ export const createPlantForPost = async (seedType, postId) => {
 
   // 為新植物分配初始位置
   const positions = garden.positions || {};
-  const plantCount = garden.plants.length;
-  positions[newPlant.id] = {
-    x: ((plantCount - 1) % 2) * 180 + 40,
-    y: Math.floor((plantCount - 1) / 2) * 120 + 200,
-  };
+  // 發文生成的植物要先出現在預設可見區，避免新增了但畫面停在其他區看不到
+  const chosenZone = 1;
+  const zoneSlotIndex = (garden.plants || []).filter((plant) => {
+    const position = positions[plant.id];
+    return getZoneIndexForPosition(position) === chosenZone;
+  }).length;
+  positions[newPlant.id] = getVisibleSpawnPosition(chosenZone, zoneSlotIndex);
 
-  await updateGarden({ ...garden, positions });
+  // 確保明確更新 plants 與 positions，並記錄用於偵錯
+  console.log(
+    "createPlantForPost: creating plant",
+    newPlant.id,
+    "zone",
+    chosenZone,
+    "pos",
+    positions[newPlant.id],
+  );
+  await updateGarden({ plants: garden.plants, positions });
+  console.log("createPlantForPost: updateGarden called for plant", newPlant.id);
+
+  // 立即讀取並 log garden，協助確認 AsyncStorage 已被寫入
+  try {
+    const after = await getGarden();
+    console.log(
+      "createPlantForPost: garden after update, plants:",
+      (after.plants || []).length,
+      "lastModified:",
+      after.lastModified,
+    );
+  } catch (e) {
+    console.error("createPlantForPost: failed to read garden after update", e);
+  }
 
   return newPlant;
 };
@@ -225,13 +372,44 @@ export const plantSeed = async (seedType, postId) => {
     rarity,
     growth: 0, // 成長階段 0-5
     repliesCount: 0, // 收到的回覆數
+    imageIndex: -1,
     locked: false,
     createdAt: new Date().toISOString(),
     postId: postId || null, // 關聯的貼文 ID
   };
 
   garden.plants.push(newPlant);
-  await updateGarden(garden);
+
+  const positions = garden.positions || {};
+  const chosenZone = pickPlantZone(garden);
+  const zoneSlotIndex = (garden.plants || []).filter((plant) => {
+    const position = positions[plant.id];
+    return getZoneIndexForPosition(position) === chosenZone;
+  }).length;
+  positions[newPlant.id] = getVisibleSpawnPosition(chosenZone, zoneSlotIndex);
+
+  console.log(
+    "plantSeed: planting",
+    newPlant.id,
+    "zone",
+    chosenZone,
+    "pos",
+    positions[newPlant.id],
+  );
+  await updateGarden({ plants: garden.plants, positions });
+  console.log("plantSeed: updateGarden called for plant", newPlant.id);
+
+  try {
+    const after = await getGarden();
+    console.log(
+      "plantSeed: garden after update, plants:",
+      (after.plants || []).length,
+      "lastModified:",
+      after.lastModified,
+    );
+  } catch (e) {
+    console.error("plantSeed: failed to read garden after update", e);
+  }
 
   return newPlant;
 };
@@ -247,10 +425,11 @@ export const growPlant = async (plantId, increment = 1) => {
 
   plant.repliesCount += increment;
 
-  // 若使用 imageIndex（負數），每收到一個回覆就 -1（例如 -1 -> -2），最小到 -5
-  if (typeof plant.imageIndex === "number") {
-    plant.imageIndex = Math.max(-5, (plant.imageIndex || -1) - increment);
-  }
+  // 若舊資料沒有 imageIndex，先補成 -1，確保後續成長會反映到外觀
+  const currentImageIndex =
+    typeof plant.imageIndex === "number" ? plant.imageIndex : -1;
+  // 每收到一個回覆就 -1（例如 -1 -> -2），最小到 -6
+  plant.imageIndex = Math.max(-6, currentImageIndex - increment);
 
   // 同時保持舊的 growth 字段（每 5 回覆為一階段）
   plant.growth = Math.min(5, Math.floor(plant.repliesCount / 5));
@@ -277,6 +456,9 @@ export const isPlantDead = (plant) => {
 export const removePlant = async (plantId) => {
   const garden = await getGarden();
   garden.plants = garden.plants.filter((p) => p.id !== plantId);
+  if (garden.positions) {
+    delete garden.positions[plantId];
+  }
   await updateGarden(garden);
 };
 
@@ -284,6 +466,7 @@ export const removePlant = async (plantId) => {
 export const clearAllPlants = async () => {
   const garden = await getGarden();
   garden.plants = [];
+  garden.positions = {};
   await updateGarden(garden);
   return garden;
 };
@@ -302,12 +485,18 @@ export const claimPendingFertilizers = async (userId) => {
       if (pendingFertilizers > 0) {
         // 領取施肥並重置
         const globalData = await getGlobalData();
-        const newFertilizers =
-          (globalData.fertilizers || 0) + pendingFertilizers;
+        const newFertilizers = Math.min(
+          30,
+          (globalData.fertilizers || 0) + pendingFertilizers,
+        );
         await updateGlobalData({ fertilizers: newFertilizers });
 
         // 在 Firebase 中重置待處理施肥
-        // 這裡我們無法直接 updateDoc，但至少本地已領取了
+        try {
+          await updateDoc(profileRef, { pendingFertilizers: 0 });
+        } catch (e) {
+          console.error("無法在 Firebase 中重置 pendingFertilizers:", e);
+        }
         return pendingFertilizers;
       }
     }
@@ -316,4 +505,164 @@ export const claimPendingFertilizers = async (userId) => {
   }
 
   return 0;
+};
+
+// 領取雲端貼文上累積的待成長次數，套用到作者本機花園
+export const claimPendingPlantGrowth = async (userId) => {
+  if (!userId) return 0;
+
+  try {
+    const postsSnap = await getDocs(collection(db, "posts"));
+    const garden = await getGarden();
+    let claimedGrowth = 0;
+
+    for (const postSnap of postsSnap.docs) {
+      const postData = postSnap.data();
+      // Accept either authorId or deviceId for compatibility
+      const postOwnerId = postData.authorId || postData.deviceId || null;
+      // Log for debugging: show owner and pendingGrowth
+      console.log(
+        "claimPendingPlantGrowth: checking post",
+        postSnap.id,
+        "owner=",
+        postOwnerId,
+        "userId=",
+        userId,
+      );
+
+      if (postOwnerId !== userId) continue;
+
+      const pendingGrowth = postData.pendingGrowth || 0;
+      if (pendingGrowth <= 0) continue;
+
+      const relatedPlants = (garden.plants || []).filter(
+        (plant) => plant.postId === postSnap.id,
+      );
+
+      console.log(
+        "claimPendingPlantGrowth: post",
+        postSnap.id,
+        "pendingGrowth=",
+        pendingGrowth,
+        "relatedPlants=",
+        relatedPlants.map((p) => p.id),
+      );
+
+      if (relatedPlants.length > 0) {
+        for (const plant of relatedPlants) {
+          await growPlant(plant.id, pendingGrowth);
+          claimedGrowth += pendingGrowth;
+        }
+      }
+
+      await updateDoc(doc(db, "posts", postSnap.id), {
+        pendingGrowth: 0,
+      });
+    }
+
+    return claimedGrowth;
+  } catch (e) {
+    console.error("領取待成長失敗:", e);
+    return 0;
+  }
+};
+
+// 領取貼文留言按讚產生的施肥獎勵
+export const claimCommentLikeFertilizers = async (userId) => {
+  if (!userId) return 0;
+
+  try {
+    const postsSnap = await getDocs(collection(db, "posts"));
+    let claimedCount = 0;
+
+    for (const postSnap of postsSnap.docs) {
+      const postData = postSnap.data();
+      const comments = Array.isArray(postData.comments)
+        ? postData.comments
+        : [];
+      let hasChanges = false;
+
+      const updatedComments = comments.map((comment) => {
+        if (comment?.userId !== userId) return comment;
+
+        if (comment.fertilizerRewardClaimed) {
+          return comment;
+        }
+
+        const rewards = Array.isArray(comment.fertilizerRewards)
+          ? comment.fertilizerRewards
+          : [];
+
+        const rewardIndex = rewards.findIndex((reward) => {
+          const claimedBy = Array.isArray(reward.claimedBy)
+            ? reward.claimedBy
+            : [];
+          return !claimedBy.includes(userId);
+        });
+
+        if (rewardIndex === -1) return comment;
+
+        const updatedRewards = rewards.map((reward, index) => {
+          if (index !== rewardIndex) return reward;
+
+          const claimedBy = Array.isArray(reward.claimedBy)
+            ? reward.claimedBy
+            : [];
+
+          return {
+            ...reward,
+            claimedBy: [...claimedBy, userId],
+            claimedAt: new Date().toISOString(),
+          };
+        });
+
+        claimedCount += 1;
+
+        hasChanges = true;
+        return {
+          ...comment,
+          fertilizerRewardClaimed: true,
+          fertilizerRewards: updatedRewards,
+        };
+      });
+
+      if (hasChanges) {
+        await updateDoc(doc(db, "posts", postSnap.id), {
+          comments: updatedComments,
+        });
+      }
+    }
+
+    if (claimedCount > 0) {
+      const globalData = await getGlobalData();
+      const newFertilizers = Math.min(
+        30,
+        (globalData.fertilizers || 0) + claimedCount,
+      );
+      await updateGlobalData({ fertilizers: newFertilizers });
+    }
+
+    return claimedCount;
+  } catch (e) {
+    console.error("領取留言按讚施肥失敗:", e);
+    return 0;
+  }
+};
+
+// 嘗試領取所有待處理獎勵，回傳實際新領取的數量。
+// 不再使用本地旗標；後端的 claimed 標記應該保證 idempotency。
+export const claimPendingRewardsOnce = async (userId) => {
+  if (!userId) return 0;
+
+  try {
+    const claimedF = await claimPendingFertilizers(userId);
+    const claimedCF = await claimCommentLikeFertilizers(userId);
+    const claimedG = await claimPendingPlantGrowth(userId);
+
+    const total = (claimedF || 0) + (claimedCF || 0) + (claimedG || 0);
+    return total;
+  } catch (e) {
+    console.error("claimPendingRewardsOnce 失敗:", e);
+    return 0;
+  }
 };

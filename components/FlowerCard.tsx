@@ -8,13 +8,17 @@ interface FlowerCardProps {
 
 export default function FlowerCard({ plant, style }: FlowerCardProps) {
   const asset = getAssetForPlant(plant);
+  const imageIndex =
+    typeof plant?.imageIndex === "number" ? plant.imageIndex : -1;
+  const isSeedStage = imageIndex === -1;
+  const imageSize = isSeedStage ? 144 : 112;
 
   return (
     <View style={[styles.container, style]}>
       {asset ? (
         <Image
           source={asset}
-          style={{ width: 80, height: 80 }}
+          style={{ width: imageSize, height: imageSize }}
           resizeMode="contain"
         />
       ) : (

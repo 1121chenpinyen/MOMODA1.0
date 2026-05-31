@@ -1,13 +1,20 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
   Easing,
+  Image,
   ImageBackground,
   PanResponder,
   ScrollView,
@@ -18,10 +25,10 @@ import {
 } from "react-native";
 import FlowerCard from "../../components/FlowerCard";
 import { db } from "../../config/firebaseConfig";
-import { getUserId } from "../../utils/getUserId";
+import { getDeviceId } from "../../utils/getDeviceId";
 import { getFallbackEmoji } from "../../utils/plantCatalog";
 import {
-  claimPendingFertilizers,
+  claimPendingRewardsOnce,
   clearAllPlants,
   getGarden,
   getGlobalData,
@@ -29,14 +36,75 @@ import {
   initGarden,
   isPlantDead,
   removePlant,
+  subscribeGardenChanges,
   updateGarden,
   updateGlobalData,
 } from "../../utils/storage";
 
 const backgroundImage = require("../../assets/background/background.png");
+const backgroundAsset = Image.resolveAssetSource(backgroundImage);
+const BACKGROUND_ASPECT_RATIO =
+  backgroundAsset.width && backgroundAsset.height
+    ? backgroundAsset.width / backgroundAsset.height
+    : 1;
 
 const { width, height } = Dimensions.get("window");
 const PLANT_SIZE = 120;
+const WORLD_WIDTH = width * 3;
+const BACKGROUND_HEIGHT = Math.min(
+  height * 0.85,
+  WORLD_WIDTH / BACKGROUND_ASPECT_RATIO,
+);
+
+const getUnlockedZoneCount = (plantCount: number) => {
+  if (plantCount >= 100) return 3;
+  if (plantCount >= 50) return 2;
+  return 1;
+};
+
+const getCameraBounds = (plantCount: number) => {
+  const zoneCount = getUnlockedZoneCount(plantCount);
+
+  if (zoneCount === 1) {
+    return { min: -width, max: -width };
+  }
+
+  if (zoneCount === 2) {
+    return { min: -width, max: 0 };
+  }
+
+  return { min: -width * 2, max: 0 };
+};
+
+const getPlantXBounds = (plantCount: number) => {
+  const zoneCount = getUnlockedZoneCount(plantCount);
+
+  if (zoneCount === 1) {
+    return { min: width, max: width * 2 - PLANT_SIZE };
+  }
+
+  if (zoneCount === 2) {
+    return { min: 0, max: width * 2 - PLANT_SIZE };
+  }
+
+  return { min: 0, max: WORLD_WIDTH - PLANT_SIZE };
+};
+
+const getDefaultWorldPosition = (
+  index: number,
+  totalPlants: number,
+  zoneCount: number,
+) => {
+  const zoneOrder =
+    zoneCount === 1 ? [1] : zoneCount === 2 ? [1, 0] : [1, 0, 2];
+  const zoneIndex = zoneOrder[index % zoneOrder.length];
+  const zonePlantRow = Math.floor(index / zoneOrder.length);
+
+  return {
+    x: zoneIndex * width + ((zonePlantRow % 2) * 180 + 40),
+    y: Math.floor(zonePlantRow / 2) * 160 + 260,
+  };
+};
 
 export default function GardenScreen() {
   const [garden, setGarden] = useState<{ seeds: number; plants: any[] } | null>(
@@ -61,21 +129,130 @@ export default function GardenScreen() {
   const zoomScale = useRef(new Animated.Value(1)).current;
   const focusCardOpacity = useRef(new Animated.Value(0)).current;
   const focusCardScale = useRef(new Animated.Value(0.96)).current;
+  const scenePanX = useRef(new Animated.Value(-width)).current;
+  const scenePanXRef = useRef(-width);
+  const scenePanStartXRef = useRef(-width);
 
   const [plantPositions, setPlantPositions] = useState<
+    Record<string, { x: number; y: number }>
+  >({});
+  const [draftPlantPositions, setDraftPlantPositions] = useState<
+    Record<string, { x: number; y: number }>
+  >({});
+  const draftPlantPositionsRef = useRef<
     Record<string, { x: number; y: number }>
   >({});
   const plantPositionsRef = useRef<Record<string, { x: number; y: number }>>(
     {},
   );
+  const plantAnimatedPositionsRef = useRef<Record<string, Animated.ValueXY>>(
+    {},
+  );
   const [lockedPlants, setLockedPlants] = useState<Set<string>>(new Set());
+  const isDraggingPlantRef = useRef(false);
+  const activePlantDragIdRef = useRef<string | null>(null);
   const dragStartPos = useRef<{
     x: number;
     y: number;
-    pageX?: number;
-    pageY?: number;
   }>({ x: 0, y: 0 });
+  const draftPlantRafRef = useRef<number | null>(null);
+  const pendingDragResetPlantIdRef = useRef<string | null>(null);
+  const [dragResetToken, setDragResetToken] = useState(0);
   const mountedRef = useRef(true);
+
+  const getAnimatedPlantPosition = (plantId: string) => {
+    if (!plantAnimatedPositionsRef.current[plantId]) {
+      plantAnimatedPositionsRef.current[plantId] = new Animated.ValueXY({
+        x: 0,
+        y: 0,
+      });
+    }
+
+    return plantAnimatedPositionsRef.current[plantId];
+  };
+
+  // 設定不同成長階段的觸碰區高度
+  // 需求：每收到 1 次回覆就升 1 階（最多 5 階），且只在 Y 軸變大
+  const TOUCH_BASE_BOTTOM_OFFSET = 10; // distance from bottom of plant container to bottom edge of touch area
+  const TOUCH_FIXED_WIDTH = 25;
+  const STAGE_TOUCH_HEIGHTS = [30, 30, 40, 50, 75, 100];
+  const STAGE_BORDER_COLORS = [
+    "rgba(0,150,136,0.9)",
+    "rgba(30,136,229,0.9)",
+    "rgba(255,193,7,0.95)",
+    "rgba(255, 131, 7, 0.95)",
+    "rgba(233,30,99,0.95)",
+    "rgba(76,175,80,0.95)",
+  ];
+  const getLockedTouchStyle = (plant: any) => {
+    const replies =
+      typeof plant?.repliesCount === "number" ? plant.repliesCount : 0;
+    const imageIndex =
+      typeof plant?.imageIndex === "number" ? plant.imageIndex : -1;
+    const isSeedStage = imageIndex === -1;
+    const visualStage = Math.max(
+      0,
+      Math.min(5, Math.abs(imageIndex || -1) - 1),
+    );
+
+    // 每收到 1 則回覆，觸碰區升 1 階；施肥一次成長兩格，所以視覺階段直接跳兩階
+    const stageCount = STAGE_TOUCH_HEIGHTS.length - 1;
+    const replyStage = Math.max(0, Math.min(stageCount, replies));
+    const stage = Math.max(replyStage, visualStage);
+    const seedTouchSize = 35;
+    const width = isSeedStage ? seedTouchSize : TOUCH_FIXED_WIDTH;
+    const height = isSeedStage ? seedTouchSize : STAGE_TOUCH_HEIGHTS[stage];
+    const left = isSeedStage
+      ? (PLANT_SIZE - width) / 2 - 2
+      : (PLANT_SIZE - width) / 2 - 2;
+    const dragTouchLift = 16;
+    const top = isSeedStage
+      ? PLANT_SIZE - height + 15
+      : PLANT_SIZE - TOUCH_BASE_BOTTOM_OFFSET - height + 20 - dragTouchLift;
+    const borderColor = STAGE_BORDER_COLORS[stage] || STAGE_BORDER_COLORS[0];
+    const backgroundColor = `rgba(255,255,255,${0.03 + stage * 0.03})`;
+    const out = {
+      width,
+      height,
+      left,
+      top,
+      borderColor,
+      backgroundColor,
+      borderWidth: 2,
+    };
+    return out;
+  };
+
+  const getDragTouchStyle = (plant: any) => {
+    const replies =
+      typeof plant?.repliesCount === "number" ? plant.repliesCount : 0;
+    const imageIndex =
+      typeof plant?.imageIndex === "number" ? plant.imageIndex : -1;
+    const isSeedStage = imageIndex === -1;
+    const visualStage = Math.max(
+      0,
+      Math.min(5, Math.abs(imageIndex || -1) - 1),
+    );
+    const stageCount = STAGE_TOUCH_HEIGHTS.length - 1;
+    const replyStage = Math.max(0, Math.min(stageCount, replies));
+    const stage = Math.max(replyStage, visualStage);
+    const topLift = isSeedStage ? -5 : -10;
+    const borderColor = STAGE_BORDER_COLORS[stage] || STAGE_BORDER_COLORS[0];
+    const backgroundColor = `rgba(255,255,255,${0.03 + stage * 0.03})`;
+
+    return {
+      position: "absolute",
+      width: PLANT_SIZE,
+      height: PLANT_SIZE,
+      left: 0,
+      top: -topLift,
+      zIndex: 5,
+      elevation: 5,
+      borderWidth: 2,
+      borderColor,
+      backgroundColor,
+    };
+  };
 
   const loadGarden = useCallback(async () => {
     if (!mountedRef.current) return;
@@ -84,38 +261,93 @@ export default function GardenScreen() {
       await initGarden();
       const gardenData = await getGarden();
       const globalData = await getGlobalData();
+      const needsWorldMigration = gardenData.layoutVersion !== 2;
+      let migratedGardenData = gardenData;
 
-      // 領取待處理的施肥
-      const userId = await getUserId();
+      if (needsWorldMigration) {
+        const migratedPositions = {
+          ...(gardenData.positions || {}),
+        };
+
+        for (const plant of gardenData.plants || []) {
+          const currentPosition = migratedPositions[plant.id];
+          if (!currentPosition) continue;
+          if (currentPosition.x >= width) continue;
+
+          migratedPositions[plant.id] = {
+            ...currentPosition,
+            x: currentPosition.x + width,
+          };
+        }
+
+        migratedGardenData = {
+          ...gardenData,
+          layoutVersion: 2,
+          positions: migratedPositions,
+        };
+
+        await updateGarden(migratedGardenData);
+      }
+
+      // 嘗試一次性領取（若尚未領取過）並更新本機施肥
+      const userId = await getDeviceId();
       if (userId) {
-        const claimedFertilizers = await claimPendingFertilizers(userId);
-        if (claimedFertilizers > 0) {
+        try {
+          const totalClaimed = await claimPendingRewardsOnce(userId);
           const updatedGlobalData = await getGlobalData();
           setFertilizers(updatedGlobalData.fertilizers || 0);
-        } else {
+
+          if (totalClaimed > 0) {
+            Alert.alert(
+              "獎勵",
+              `你獲得了 ${totalClaimed} 次施肥！已加入施肥庫存。`,
+            );
+          }
+        } catch (e) {
+          console.error("花園領取待處理獎勵失敗:", e);
           setFertilizers(globalData.fertilizers || 0);
         }
       } else {
         setFertilizers(globalData.fertilizers || 0);
       }
 
-      setGarden(gardenData);
+      const refreshedGardenData = needsWorldMigration
+        ? migratedGardenData
+        : await getGarden();
+      setGarden(refreshedGardenData);
       setWaterDrops(globalData.waterDrops || 0);
 
-      const positions: Record<string, { x: number; y: number }> =
-        gardenData.positions || {};
+      if (!plantFocusVisible) {
+        scenePanXRef.current = -width;
+        scenePanX.setValue(-width);
+      }
 
-      gardenData.plants?.forEach((plant: any, index: number) => {
+      const positions: Record<string, { x: number; y: number }> =
+        refreshedGardenData.positions || {};
+      const zoneCount = getUnlockedZoneCount(
+        refreshedGardenData.plants?.length || 0,
+      );
+      const maxVisibleY = Math.max(0, gardenAreaHeight - PLANT_SIZE);
+
+      refreshedGardenData.plants?.forEach((plant: any, index: number) => {
         if (!positions[plant.id]) {
+          positions[plant.id] = getDefaultWorldPosition(
+            index,
+            refreshedGardenData.plants?.length || 0,
+            zoneCount,
+          );
+        } else if (positions[plant.id].y > maxVisibleY) {
           positions[plant.id] = {
-            x: (index % 2) * (width / 2) + 40,
-            y: Math.floor(index / 2) * 100 + 200,
+            ...positions[plant.id],
+            y: maxVisibleY,
           };
         }
       });
 
       setPlantPositions(positions);
       plantPositionsRef.current = positions;
+      setDraftPlantPositions({});
+      draftPlantPositionsRef.current = {};
 
       const restoredLockedPlants = new Set<string>();
       gardenData.plants?.forEach((plant: any) => {
@@ -134,6 +366,29 @@ export default function GardenScreen() {
   useEffect(() => {
     loadGarden();
   }, [loadGarden]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeGardenChanges(() => {
+      if (mountedRef.current) {
+        loadGarden();
+      }
+    });
+
+    return unsubscribe;
+  }, [loadGarden]);
+
+  useEffect(() => {
+    const bounds = getCameraBounds(garden?.plants?.length || 0);
+    const clampedX = Math.max(
+      bounds.min,
+      Math.min(scenePanXRef.current, bounds.max),
+    );
+
+    if (clampedX !== scenePanXRef.current) {
+      scenePanXRef.current = clampedX;
+      scenePanX.setValue(clampedX);
+    }
+  }, [garden?.plants?.length, scenePanX]);
 
   useFocusEffect(
     useCallback(() => {
@@ -169,6 +424,8 @@ export default function GardenScreen() {
             setGarden(updatedGarden);
             setPlantPositions(updatedGarden.positions || {});
             plantPositionsRef.current = updatedGarden.positions || {};
+            setDraftPlantPositions({});
+            draftPlantPositionsRef.current = {};
 
             // 如果當前焦點植物已死亡，關閉焦點視圖
             if (selectedPlant && deadPlants.includes(selectedPlant.id)) {
@@ -190,72 +447,213 @@ export default function GardenScreen() {
   }, [garden?.plants, selectedPlant]);
 
   const createPanResponder = (plantId: string) => {
+    const animatedPos = getAnimatedPlantPosition(plantId);
+
     const responder = PanResponder.create({
-      onStartShouldSetPanResponder: () => !lockedPlants.has(plantId),
-      onMoveShouldSetPanResponder: () => !lockedPlants.has(plantId),
+      onStartShouldSetPanResponder: () => {
+        if (lockedPlants.has(plantId)) return false;
+        if (
+          isDraggingPlantRef.current &&
+          activePlantDragIdRef.current !== plantId
+        ) {
+          return false;
+        }
+        return true;
+      },
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_evt, gestureState) => {
+        if (lockedPlants.has(plantId)) return false;
+        if (
+          isDraggingPlantRef.current &&
+          activePlantDragIdRef.current !== plantId
+        ) {
+          return false;
+        }
+        return Math.abs(gestureState.dx) > 0 || Math.abs(gestureState.dy) > 0;
+      },
+      onMoveShouldSetPanResponderCapture: () => false,
+      onPanResponderTerminationRequest: () => !isDraggingPlantRef.current,
+      onShouldBlockNativeResponder: () => false,
       onPanResponderGrant: () => {
         if (lockedPlants.has(plantId)) return;
-        const pos = plantPositions[plantId] || { x: 0, y: 0 };
+        isDraggingPlantRef.current = true;
+        activePlantDragIdRef.current = plantId;
+        animatedPos.stopAnimation();
+        animatedPos.setValue({ x: 0, y: 0 });
+        const pos = draftPlantPositionsRef.current[plantId] ||
+          plantPositions[plantId] || { x: 0, y: 0 };
         dragStartPos.current = { x: pos.x, y: pos.y };
       },
-      onPanResponderMove: (evt: any) => {
+      onPanResponderMove: (_evt: any, gestureState: any) => {
         if (lockedPlants.has(plantId)) return;
-
-        const { pageX, pageY } = evt.nativeEvent;
         const startPos = dragStartPos.current;
 
-        if (!dragStartPos.current.pageX) {
-          dragStartPos.current.pageX = pageX;
-          dragStartPos.current.pageY = pageY;
-          return;
-        }
-
-        const dx = pageX - (dragStartPos.current.pageX || 0);
-        const dy = pageY - (dragStartPos.current.pageY || 0);
-
         const newPos = {
-          x: startPos.x + dx,
-          y: startPos.y + dy,
+          x: startPos.x + gestureState.dx,
+          y: startPos.y + gestureState.dy,
         };
 
-        const maxY = Math.max(20, gardenAreaHeight - PLANT_SIZE - 20);
+        const maxY = Math.max(0, gardenAreaHeight - PLANT_SIZE);
+        const minY = 0;
+        const cameraLeft = Math.max(
+          0,
+          Math.min(-scenePanXRef.current, WORLD_WIDTH - gardenAreaLayout.width),
+        );
+        const xBounds = {
+          min: Math.max(0, cameraLeft - 60),
+          max: Math.min(
+            WORLD_WIDTH - PLANT_SIZE,
+            cameraLeft + gardenAreaLayout.width - PLANT_SIZE + 60,
+          ),
+        };
 
-        newPos.x = Math.max(-30, Math.min(newPos.x, width - 95));
-        newPos.y = Math.max(-50, Math.min(newPos.y, maxY));
+        newPos.x = Math.max(xBounds.min, Math.min(newPos.x, xBounds.max));
+        newPos.y = Math.max(minY, Math.min(newPos.y, maxY));
 
-        setPlantPositions((prev) => {
-          const next = {
-            ...prev,
-            [plantId]: newPos,
-          };
-          plantPositionsRef.current = next;
-          return next;
+        animatedPos.setValue({
+          x: newPos.x - startPos.x,
+          y: newPos.y - startPos.y,
         });
+
+        draftPlantPositionsRef.current = {
+          ...draftPlantPositionsRef.current,
+          [plantId]: newPos,
+        };
       },
       onPanResponderRelease: () => {
+        // 放開時只保留預覽位置 (draft)，不要自動儲存為正式位置。
+        // 使用者必須按下打勾 (handleLockPlant) 才會真正提交位置。
         try {
-          updateGarden({ positions: plantPositionsRef.current });
+          if (draftPlantRafRef.current != null) {
+            cancelAnimationFrame(draftPlantRafRef.current);
+            draftPlantRafRef.current = null;
+          }
+          // 動畫回位，但保留 draftPlantPositionsRef 中的預覽位置
+          const previewPos = draftPlantPositionsRef.current[plantId];
+          if (previewPos) {
+            plantPositionsRef.current = {
+              ...plantPositionsRef.current,
+              [plantId]: previewPos,
+            };
+            setPlantPositions((prev) => ({
+              ...prev,
+              [plantId]: previewPos,
+            }));
+            setDraftPlantPositions((prev) => ({
+              ...prev,
+              [plantId]: previewPos,
+            }));
+          }
+          pendingDragResetPlantIdRef.current = plantId;
+          setDragResetToken((token) => token + 1);
         } catch (e) {
-          console.error("儲存植物位置失敗", e);
+          console.error("拖曳釋放時處理失敗", e);
+        } finally {
+          isDraggingPlantRef.current = false;
+          activePlantDragIdRef.current = null;
         }
+      },
+      onPanResponderTerminate: () => {
+        if (draftPlantRafRef.current != null) {
+          cancelAnimationFrame(draftPlantRafRef.current);
+          draftPlantRafRef.current = null;
+        }
+        pendingDragResetPlantIdRef.current = plantId;
+        setDragResetToken((token) => token + 1);
+        isDraggingPlantRef.current = false;
+        activePlantDragIdRef.current = null;
       },
     });
 
     return responder;
   };
 
+  useLayoutEffect(() => {
+    const plantId = pendingDragResetPlantIdRef.current;
+    if (!plantId) return;
+
+    const animatedPos = plantAnimatedPositionsRef.current[plantId];
+    if (animatedPos) {
+      animatedPos.setValue({ x: 0, y: 0 });
+    }
+
+    pendingDragResetPlantIdRef.current = null;
+  }, [dragResetToken]);
+
+  const scenePanResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_evt, gestureState) => {
+      if (isDraggingPlantRef.current) return false;
+      if (plantFocusVisible) return false;
+      return (
+        Math.abs(gestureState.dx) > 8 &&
+        Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
+      );
+    },
+    onMoveShouldSetPanResponderCapture: () => false,
+    onPanResponderGrant: () => {
+      if (isDraggingPlantRef.current) return;
+      scenePanStartXRef.current = scenePanXRef.current;
+    },
+    onPanResponderMove: (_evt, gestureState) => {
+      if (isDraggingPlantRef.current) return;
+      const bounds = getCameraBounds(garden?.plants?.length || 0);
+      const nextX = Math.max(
+        bounds.min,
+        Math.min(scenePanStartXRef.current + gestureState.dx, bounds.max),
+      );
+
+      scenePanXRef.current = nextX;
+      scenePanX.setValue(nextX);
+    },
+    onPanResponderRelease: () => {
+      if (isDraggingPlantRef.current) return;
+      const bounds = getCameraBounds(garden?.plants?.length || 0);
+      const nextX = Math.max(
+        bounds.min,
+        Math.min(scenePanXRef.current, bounds.max),
+      );
+      scenePanXRef.current = nextX;
+      scenePanX.setValue(nextX);
+    },
+    onPanResponderTerminationRequest: () => true,
+    onShouldBlockNativeResponder: () => false,
+  });
+
   const handleLockPlant = async (plantId: string) => {
     if (!garden) return;
 
+    const confirmedPos =
+      draftPlantPositionsRef.current[plantId] ||
+      draftPlantPositions[plantId] ||
+      plantPositionsRef.current[plantId] ||
+      plantPositions[plantId];
+    if (!confirmedPos) return;
     const updatedPlants = (garden.plants || []).map((plant: any) =>
       plant.id === plantId ? { ...plant, locked: true } : plant,
     );
 
+    const nextPositions = {
+      ...plantPositionsRef.current,
+      [plantId]: confirmedPos,
+    };
+
     setGarden({ ...garden, plants: updatedPlants });
+    plantPositionsRef.current = nextPositions;
+    setPlantPositions(nextPositions);
+    draftPlantPositionsRef.current = {
+      ...draftPlantPositionsRef.current,
+      [plantId]: confirmedPos,
+    };
+    setDraftPlantPositions((prev) => {
+      const nextDraft = { ...prev };
+      delete nextDraft[plantId];
+      return nextDraft;
+    });
     await updateGarden({
       ...garden,
       plants: updatedPlants,
-      positions: plantPositionsRef.current,
+      positions: nextPositions,
     });
 
     setLockedPlants((prev) => new Set(prev).add(plantId));
@@ -314,14 +712,30 @@ export default function GardenScreen() {
     }
 
     try {
+      const currentImageIndex =
+        typeof selectedPlant.imageIndex === "number"
+          ? selectedPlant.imageIndex
+          : -1;
+      if (currentImageIndex <= -6) {
+        Alert.alert("提醒", "這株植物已經是最終型態了");
+        return;
+      }
+
+      const nextImageIndex = Math.max(-6, currentImageIndex - 2);
+
       const updatedPlants = (garden.plants || []).map((plant: any) =>
-        plant.id === selectedPlant.id ? { ...plant, repliesCount: 4 } : plant,
+        plant.id === selectedPlant.id
+          ? {
+              ...plant,
+              imageIndex: nextImageIndex,
+            }
+          : plant,
       );
 
       setGarden({ ...garden, plants: updatedPlants });
       setSelectedPlant({
         ...selectedPlant,
-        repliesCount: 4,
+        imageIndex: nextImageIndex,
       });
 
       await updateGarden({
@@ -336,7 +750,9 @@ export default function GardenScreen() {
 
       Alert.alert(
         "成功",
-        `已施肥！植物已成長到最終型態\n剩餘施肥: ${newFertilizers}`,
+        nextImageIndex <= -6
+          ? `已施肥！植物已成長到最終型態\n剩餘施肥: ${newFertilizers}`
+          : `已施肥！植物已往下一階段成長\n剩餘施肥: ${newFertilizers}`,
       );
     } catch (e) {
       console.error("施肥失敗", e);
@@ -344,10 +760,15 @@ export default function GardenScreen() {
     }
   };
 
+  const getPlantVisualStage = (plant: any) => {
+    const imageIndex =
+      typeof plant?.imageIndex === "number" ? plant.imageIndex : -1;
+    return Math.max(0, Math.min(5, Math.abs(imageIndex || -1) - 1));
+  };
+
   const getPlantStage = (plant: any) => {
-    if (plant.repliesCount === 0) return "種子";
-    if (plant.repliesCount < 5) return "幼苗";
-    return "花";
+    const stages = ["種子", "發芽", "幼苗", "小草", "小花", "花"];
+    return stages[getPlantVisualStage(plant)] || "種子";
   };
 
   const formatPostTime = (time: any) => {
@@ -361,17 +782,18 @@ export default function GardenScreen() {
   const getGrowthHistory = (plant: any) => {
     const replies = plant?.repliesCount || 0;
     const stage = getPlantStage(plant);
+    const visualStage = getPlantVisualStage(plant);
+    const nextStageNames = ["發芽", "幼苗", "小草", "小花", "花"];
 
     const timeline = [
       `播種完成：${new Date(plant.createdAt).toLocaleDateString("zh-TW")}`,
       `目前階段：${stage}（累積 ${replies} 則回覆）`,
     ];
 
-    if (replies < 5) {
-      timeline.push(`下一階段還差 ${5 - replies} 則回覆`);
+    if (visualStage < 5) {
+      timeline.push(`下一階段：${nextStageNames[visualStage]}`);
     } else {
-      const flowerTier = Math.ceil(replies / 5);
-      timeline.push(`開花進度：第 ${flowerTier} 次成長波段`);
+      timeline.push("已達最終型態");
     }
 
     return timeline;
@@ -379,20 +801,21 @@ export default function GardenScreen() {
 
   const runOpenFocusAnimation = useCallback(
     (plant: any) => {
-      const pos = plantPositionsRef.current[plant.id] || { x: 0, y: 0 };
+      const pos = draftPlantPositions[plant.id] ||
+        plantPositionsRef.current[plant.id] || { x: 0, y: 0 };
       const sourceCenter = {
-        x: pos.x + PLANT_SIZE / 2,
+        x: pos.x + scenePanXRef.current + PLANT_SIZE / 2,
         y: pos.y + PLANT_SIZE / 2,
       };
 
-      const zoom = width >= 900 ? 2.05 : 5.35;
+      const zoom = width >= 900 ? 1.85 : 2.1;
       const targetCenter = {
         x: width / 2,
-        y: height / 2 - 50,
+        y: height / 2 - 80,
       };
 
-      const translateX = zoom * (targetCenter.x - sourceCenter.x);
-      const translateY = zoom * (targetCenter.y - sourceCenter.y);
+      const translateX = targetCenter.x - sourceCenter.x;
+      const translateY = targetCenter.y - sourceCenter.y;
 
       setSelectedPlant(plant);
       setFocusedPost(null);
@@ -448,6 +871,7 @@ export default function GardenScreen() {
     [
       focusCardOpacity,
       focusCardScale,
+      draftPlantPositions,
       overlayOpacity,
       zoomScale,
       zoomTranslateX,
@@ -507,6 +931,25 @@ export default function GardenScreen() {
     zoomTranslateY,
   ]);
 
+  const resetGardenViewInstant = useCallback(() => {
+    overlayOpacity.setValue(0);
+    zoomTranslateX.setValue(0);
+    zoomTranslateY.setValue(0);
+    zoomScale.setValue(1);
+    focusCardOpacity.setValue(0);
+    focusCardScale.setValue(0.96);
+    scenePanXRef.current = -width;
+    scenePanX.setValue(-width);
+  }, [
+    focusCardOpacity,
+    focusCardScale,
+    overlayOpacity,
+    scenePanX,
+    zoomScale,
+    zoomTranslateX,
+    zoomTranslateY,
+  ]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -544,6 +987,19 @@ export default function GardenScreen() {
       cancelled = true;
     };
   }, [plantFocusVisible, selectedPlant]);
+
+  useEffect(() => {
+    if (!selectedPlant || !garden?.plants) return;
+    const stillExists = garden.plants.some(
+      (plant: any) => plant.id === selectedPlant.id,
+    );
+    if (!stillExists) {
+      setPlantFocusVisible(false);
+      setSelectedPlant(null);
+      setFocusedPost(null);
+      setLoadingPost(false);
+    }
+  }, [garden?.plants, selectedPlant]);
 
   if (loading) {
     return (
@@ -603,30 +1059,60 @@ export default function GardenScreen() {
         </TouchableOpacity>
       </View>
 
-      <ImageBackground
-        source={backgroundImage}
-        style={styles.sceneBackground}
-      />
-
-      <Animated.View
-        style={[
-          styles.sceneTranslateLayer,
-          plantFocusVisible && {
-            transform: [
-              { translateX: zoomTranslateX },
-              { translateY: zoomTranslateY },
-            ],
-          },
-        ]}
+      <View
+        style={styles.sceneViewport}
+        onLayout={(event) => {
+          setGardenAreaHeight(event.nativeEvent.layout.height);
+          setGardenAreaLayout(event.nativeEvent.layout);
+        }}
+        {...scenePanResponder.panHandlers}
       >
         <Animated.View
           style={[
-            styles.sceneScaleLayer,
-            plantFocusVisible && { transform: [{ scale: zoomScale }] },
+            styles.sceneWorld,
+            {
+              width: WORLD_WIDTH,
+              transform: [
+                {
+                  translateX: Animated.add(scenePanX, zoomTranslateX),
+                },
+                { translateY: zoomTranslateY },
+                { scale: zoomScale },
+              ],
+            },
           ]}
         >
+          <ImageBackground
+            source={backgroundImage}
+            style={[
+              styles.sceneBackground,
+              {
+                width: WORLD_WIDTH,
+                height: Math.min(BACKGROUND_HEIGHT, gardenAreaHeight),
+              },
+            ]}
+            resizeMode="cover"
+          />
+
+          <View style={styles.zoneHintLayer} pointerEvents="none">
+            {getUnlockedZoneCount(sortedPlants.length) < 2 && (
+              <View style={[styles.lockedZoneOverlay, { left: 0, width }]}>
+                <Text style={styles.lockedZoneText}>左側花園鎖定</Text>
+                <Text style={styles.lockedZoneSubText}>種滿 50 朵花解鎖</Text>
+              </View>
+            )}
+            {getUnlockedZoneCount(sortedPlants.length) < 3 && (
+              <View
+                style={[styles.lockedZoneOverlay, { left: width * 2, width }]}
+              >
+                <Text style={styles.lockedZoneText}>右側花園鎖定</Text>
+                <Text style={styles.lockedZoneSubText}>再種滿 50 朵花解鎖</Text>
+              </View>
+            )}
+          </View>
+
           {sortedPlants.length === 0 && (
-            <View style={styles.emptyContainer}>
+            <View style={[styles.emptyContainer, { width: WORLD_WIDTH }]}>
               <Text style={styles.emptyEmoji}>🌱</Text>
               <Text style={styles.emptyText}>你的花園還是空的</Text>
               <Text style={styles.emptySubText}>
@@ -637,59 +1123,102 @@ export default function GardenScreen() {
 
           {sortedPlants.length > 0 && (
             <View
-              style={styles.gardenArea}
+              style={[styles.gardenArea, { width: WORLD_WIDTH }]}
               pointerEvents={plantFocusVisible ? "none" : "auto"}
             >
               {sortedPlants.map((plant, index) => {
-                const pos = plantPositions[plant.id] || { x: 0, y: 0 };
+                const defaultPos = getDefaultWorldPosition(
+                  index,
+                  sortedPlants.length,
+                  getUnlockedZoneCount(sortedPlants.length),
+                );
+                const committedPos = plantPositions[plant.id] || defaultPos;
+                const previewPos =
+                  draftPlantPositions[plant.id] || committedPos;
+                const isActiveDrag =
+                  isDraggingPlantRef.current &&
+                  activePlantDragIdRef.current === plant.id;
+                const pos = previewPos;
                 const panResponder = createPanResponder(plant.id);
                 const isLocked = lockedPlants.has(plant.id);
+                const dragTransform = isLocked
+                  ? []
+                  : [
+                      ...getAnimatedPlantPosition(
+                        plant.id,
+                      ).getTranslateTransform(),
+                    ];
 
-                return (
-                  <TouchableOpacity
+                return isLocked ? (
+                  <Animated.View
                     key={plant.id}
                     style={[
                       styles.plantContainer,
                       {
                         left: pos.x,
                         top: pos.y,
-                        zIndex: index,
+                        zIndex: Math.round(pos.y) + (isActiveDrag ? 10000 : 0),
+                        elevation:
+                          Math.round(pos.y) + (isActiveDrag ? 10000 : 0),
                       },
                     ]}
-                    onPress={() => {
-                      if (isLocked) {
-                        runOpenFocusAnimation(plant);
-                      }
-                    }}
-                    activeOpacity={1}
                   >
-                    <View
-                      style={styles.draggablePlant}
-                      pointerEvents={isLocked ? "none" : "auto"}
-                      {...(isLocked ? {} : (panResponder.panHandlers as any))}
-                    >
+                    <View style={styles.draggablePlant} pointerEvents="none">
                       <FlowerCard plant={plant} />
                     </View>
 
-                    {!isLocked && (
-                      <TouchableOpacity
-                        style={styles.confirmButton}
-                        onPress={() => handleLockPlant(plant.id)}
-                      >
-                        <MaterialCommunityIcons
-                          name="check"
-                          size={16}
-                          color="#fff"
-                        />
-                      </TouchableOpacity>
-                    )}
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.touchArea, getLockedTouchStyle(plant)]}
+                      activeOpacity={0.9}
+                      onPress={() => runOpenFocusAnimation(plant)}
+                    />
+                  </Animated.View>
+                ) : (
+                  <Animated.View
+                    key={plant.id}
+                    style={[
+                      styles.plantContainer,
+                      {
+                        left: pos.x,
+                        top: pos.y,
+                      },
+                      {
+                        zIndex: Math.round(pos.y) + (isActiveDrag ? 10000 : 0),
+                        elevation:
+                          Math.round(pos.y) + (isActiveDrag ? 10000 : 0),
+                      },
+                      ...(dragTransform.length
+                        ? [{ transform: dragTransform }]
+                        : []),
+                    ]}
+                  >
+                    <View style={styles.draggablePlant} pointerEvents="none">
+                      <FlowerCard plant={plant} />
+                    </View>
+
+                    <View
+                      style={[styles.dragTouchArea, getDragTouchStyle(plant)]}
+                      {...(panResponder.panHandlers as any)}
+                    />
+
+                    <TouchableOpacity
+                      style={styles.confirmButton}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      onPress={() => handleLockPlant(plant.id)}
+                    >
+                      <MaterialCommunityIcons
+                        name="check"
+                        size={16}
+                        color="#fff"
+                      />
+                    </TouchableOpacity>
+                  </Animated.View>
                 );
               })}
             </View>
           )}
         </Animated.View>
-      </Animated.View>
+      </View>
 
       {plantFocusVisible && selectedPlant && (
         <Animated.View
@@ -843,11 +1372,15 @@ export default function GardenScreen() {
                           style: "destructive",
                           onPress: async () => {
                             if (!selectedPlant) return;
+                            const deletingPlantId = selectedPlant.id;
+                            resetGardenViewInstant();
+                            setPlantFocusVisible(false);
+                            setSelectedPlant(null);
+                            setFocusedPost(null);
                             setLoading(true);
                             try {
-                              await removePlant(selectedPlant.id);
+                              await removePlant(deletingPlantId);
                               await loadGarden();
-                              closeFocusPanel();
                             } catch (e) {
                               console.error("刪除植物失敗", e);
                               Alert.alert("錯誤", "刪除植物失敗");
@@ -879,7 +1412,7 @@ export default function GardenScreen() {
                       color="#fff"
                     />
                     <Text style={styles.actionButtonText}>
-                      澆水 ({waterDrops})
+                      澆水 ({waterDrops}/30)
                     </Text>
                   </TouchableOpacity>
 
@@ -893,7 +1426,7 @@ export default function GardenScreen() {
                       color="#fff"
                     />
                     <Text style={styles.actionButtonText}>
-                      施肥 ({fertilizers})
+                      施肥 ({fertilizers}/30)
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -911,26 +1444,29 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F5F5F5",
   },
-  sceneContainer: {
+  sceneViewport: {
     flex: 1,
+    position: "relative",
+    overflow: "hidden",
   },
-  sceneTranslateLayer: {
+  sceneWorld: {
     position: "absolute",
     top: 0,
     left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  sceneScaleLayer: {
-    ...StyleSheet.absoluteFillObject,
+    height: "100%",
   },
   sceneBackground: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    height: "100%",
   },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 20,
+    elevation: 20,
   },
   topBar: {
     flexDirection: "row",
@@ -985,14 +1521,32 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   gardenArea: {
-    flex: 1,
     position: "relative",
-    overflow: "hidden",
+    height: "100%",
   },
   plantContainer: {
     position: "absolute",
     width: PLANT_SIZE,
     height: PLANT_SIZE,
+  },
+  touchArea: {
+    position: "absolute",
+    width: 25,
+    height: 30,
+    left: (PLANT_SIZE - 25) / 2,
+    top: (PLANT_SIZE - 30) / 2 + 30,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    borderRadius: 8,
+  },
+  dragTouchArea: {
+    width: PLANT_SIZE,
+    height: PLANT_SIZE,
+    left: 0,
+    top: 0,
+    borderRadius: PLANT_SIZE / 2,
   },
   draggablePlant: {
     width: PLANT_SIZE,
@@ -1002,8 +1556,8 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     position: "absolute",
-    bottom: -15,
-    right: -15,
+    bottom: 10,
+    right: 10,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -1014,7 +1568,39 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 4,
+    zIndex: 1000,
+    elevation: 1000,
+  },
+  zoneHintLayer: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: "row",
+  },
+  lockedZoneOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(23, 53, 32, 0.18)",
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  lockedZoneText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 4,
+    textShadowColor: "rgba(0, 0, 0, 0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  lockedZoneSubText: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.95)",
+    textShadowColor: "rgba(0, 0, 0, 0.3)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   focusOverlay: {
     position: "absolute",
@@ -1202,5 +1788,18 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 14,
+  },
+  debugOverlay: {
+    position: "absolute",
+    top: 64,
+    right: 12,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    padding: 8,
+    borderRadius: 8,
+    zIndex: 2000,
+  },
+  debugText: {
+    color: "#fff",
+    fontSize: 11,
   },
 });
