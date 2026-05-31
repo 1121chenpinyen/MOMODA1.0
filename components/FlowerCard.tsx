@@ -12,13 +12,20 @@ export default function FlowerCard({ plant, style }: FlowerCardProps) {
     typeof plant?.imageIndex === "number" ? plant.imageIndex : -1;
   const isSeedStage = imageIndex === -1;
   const imageSize = isSeedStage ? 144 : 112;
+  const imageStyle = [
+    styles.plantImage,
+    {
+      width: imageSize,
+      height: imageSize,
+    },
+  ];
 
   return (
     <View style={[styles.container, style]}>
       {asset ? (
         <Image
           source={asset}
-          style={{ width: imageSize, height: imageSize }}
+          style={imageStyle}
           resizeMode="contain"
         />
       ) : (
@@ -35,6 +42,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 0,
+  },
+  plantImage: {
+    borderWidth: 3,
+    borderColor: "#a29add",
+    borderRadius: 18,
+    overflow: "hidden",
   },
   emoji: {
     fontSize: 50,

@@ -22,6 +22,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     width: 150
   },
-  image: { width: 100, height: 100, marginBottom: 5 },
+  image: {
+    width: 100,
+    height: 100,
+    marginBottom: 5,
+    borderWidth: 3,
+    borderColor: '#a29add',
+    borderRadius: 14,
+    overflow: 'hidden'
+  },
   name: { fontWeight: 'bold', marginBottom: 5 }
 });

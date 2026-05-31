@@ -384,6 +384,9 @@ const styles = StyleSheet.create({
     height: 250,
     borderRadius: 12,
     resizeMode: "cover",
+    borderWidth: 3,
+    borderColor: "#a29add",
+    overflow: "hidden",
   },
   videoPlaceholder: {
     backgroundColor: "#1f1f1f",

@@ -254,10 +254,15 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   postImage: {
-    width: SCREEN_WIDTH,
+    width: SCREEN_WIDTH - 24,
     height: Math.floor(SCREEN_WIDTH * 0.75),
     resizeMode: "cover",
     marginVertical: 8,
+    alignSelf: "center",
+    borderWidth: 3,
+    borderColor: "#a29add",
+    borderRadius: 14,
+    overflow: "hidden",
   },
   actionBar: {
     flexDirection: "row",

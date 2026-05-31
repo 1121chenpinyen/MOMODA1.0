@@ -465,6 +465,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 8,
     resizeMode: "cover",
+    borderWidth: 3,
+    borderColor: "#a29add",
+    overflow: "hidden",
   },
   commentTime: {
     fontSize: 12,
@@ -496,6 +499,9 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 8,
     resizeMode: "cover",
+    borderWidth: 3,
+    borderColor: "#a29add",
+    overflow: "hidden",
   },
   removeImageBtn: {
     position: "absolute",
