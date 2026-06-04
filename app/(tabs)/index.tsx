@@ -2,60 +2,58 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    increment,
-    onSnapshot,
-    orderBy,
-    query,
-    serverTimestamp,
-    updateDoc,
-    where
+  addDoc,
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  increment,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
 import { getRandomVariantForTag } from "../../utils/plantCatalog";
 import {
-    claimPendingPlantGrowth,
-    claimPendingRewardsOnce,
-    createPlantForPost,
-    getGarden,
-    getGlobalData,
-    growPlant,
-    updateGlobalData,
+  claimPendingPlantGrowth,
+  claimPendingRewardsOnce,
+  createPlantForPost,
+  getGarden,
+  getGlobalData,
+  growPlant,
+  updateGlobalData,
 } from "../../utils/storage";
 
 const TAGS = [
-  "心情",
   "人際",
   "學業/工作",
   "飲食",
   "運動",
   "寵物",
-  "金錢",
   "娛樂",
-  "自我成長",
   "其他",
 ];
 
@@ -81,6 +79,7 @@ type CommentType = {
   userName: string;
   userAvatar: string;
   createdAt: any;
+  imageUrl?: string;
 
   likes?: number;
   likedBy?: string[];
@@ -90,6 +89,7 @@ type PostType = {
   id: string;
   text: string;
   tag?: string;
+  tags?: string[];
   media?: MediaType | null;
   likes?: number;
   likedBy?: string[];
@@ -121,6 +121,13 @@ function formatTime(createdAt: any) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+const getPostTags = (post: PostType) =>
+  post.tags && post.tags.length > 0
+    ? post.tags
+    : post.tag
+    ? [post.tag]
+    : [];
+
 export default function HomeScreen() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<UserType>({
@@ -134,6 +141,7 @@ export default function HomeScreen() {
   const [commentVisible, setCommentVisible] = useState(false);
   const [selectedPost, setSelectedPost] = useState<PostType | null>(null);
   const [commentText, setCommentText] = useState("");
+  const [commentImage, setCommentImage] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [profileMap, setProfileMap] = useState<Record<string, any>>({});
   const [searchText, setSearchText] = useState("");
@@ -404,7 +412,10 @@ export default function HomeScreen() {
     }
 
     if (selectedFilterTag) {
-      result = result.filter((post) => post.tag === selectedFilterTag);
+      result = result.filter((post) => {
+        const postTags = getPostTags(post);
+        return postTags.includes(selectedFilterTag);
+      });
     }
 
     if (sortMode === "saves") {
@@ -430,6 +441,8 @@ export default function HomeScreen() {
     return result;
   }, [posts, searchText, selectedFilterTag, sortMode]);
 
+  const selectedPostTags = selectedPost ? getPostTags(selectedPost) : [];
+
   const uploadMediaAsync = async (media: MediaType | null) => {
     if (!media) return null;
 
@@ -448,18 +461,29 @@ export default function HomeScreen() {
     };
   };
 
+  const uploadCommentImageAsync = async (uri: string) => {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+
+    const fileName = `comments/${Date.now()}_comment.jpg`;
+    const storageRef = ref(storage, fileName);
+
+    await uploadBytes(storageRef, blob);
+    return await getDownloadURL(storageRef);
+  };
+
   const handlePublish = async (
     text: string,
     media: MediaType | null,
-    tag: string,
+    tags: string[],
   ) => {
     if (!text.trim() && !media) {
       Alert.alert("請輸入內容或選擇照片/影片");
       return;
     }
 
-    if (!tag) {
-      Alert.alert("請選擇標籤");
+    if (!tags || tags.length === 0) {
+      Alert.alert("請選擇至少一個標籤");
       return;
     }
 
@@ -475,7 +499,8 @@ export default function HomeScreen() {
 
       const postRef = await addDoc(collection(db, "posts"), {
         text: text.trim(),
-        tag,
+        tag: tags[0],
+        tags,
         media: uploadedMedia,
         likes: 0,
         likedBy: [],
@@ -488,7 +513,7 @@ export default function HomeScreen() {
         authorAvatar: currentUser.avatar,
       });
 
-      const variant = getRandomVariantForTag(tag);
+      const variant = getRandomVariantForTag(tags[0]);
       if (variant) {
         await createPlantForPost(variant, postRef.id);
         setPublishVisible(false);
@@ -543,14 +568,60 @@ export default function HomeScreen() {
   const openCommentModal = (post: PostType) => {
     setSelectedPost(post);
     setCommentText("");
+    setCommentImage(null);
     setCommentVisible(true);
+  };
+
+  const takeCommentPhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("權限不足", "需要相機權限才能拍照");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: "images",
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      const uri = result.assets?.[0]?.uri || (result as any).uri;
+      if (uri) {
+        setCommentImage(uri);
+      }
+    }
+  };
+
+  const pickCommentPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("權限不足", "需要相簿權限才能選取照片");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "images",
+      allowsEditing: true,
+      quality: 0.7,
+      selectionLimit: 1,
+    });
+
+    if (!result.canceled) {
+      const uri = result.assets?.[0]?.uri || (result as any).uri;
+      if (uri) {
+        setCommentImage(uri);
+      }
+    }
   };
 
   const handleAddComment = async () => {
     if (!selectedPost) return;
 
-    if (!commentText.trim()) {
-      Alert.alert("請輸入留言");
+    const trimmedText = commentText.trim();
+    if (!trimmedText && !commentImage) {
+      Alert.alert("請輸入留言或加上照片");
       return;
     }
 
@@ -564,21 +635,27 @@ export default function HomeScreen() {
       const postOwnerId =
         selectedPost.authorId || selectedPost.deviceId || null;
 
+      let imageUrl: string | undefined;
+      if (commentImage) {
+        imageUrl = await uploadCommentImageAsync(commentImage);
+      }
+
       const newComment: CommentType = {
         id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        text: commentText.trim(),
+        text: trimmedText,
         userId: currentUser.userId,
         userName: currentUser.name,
         userAvatar: currentUser.avatar,
         createdAt: new Date().toISOString(),
         likes: 0,
         likedBy: [],
+        ...(imageUrl ? { imageUrl } : {}),
       };
 
       const updatedComments = [...oldComments, newComment];
 
       await updateDoc(doc(db, "posts", selectedPost.id), {
-        comments: updatedComments,
+        comments: arrayUnion(newComment),
       });
 
       try {
@@ -613,8 +690,10 @@ export default function HomeScreen() {
       });
 
       setCommentText("");
-    } catch {
-      Alert.alert("留言失敗", "請稍後再試");
+      setCommentImage(null);
+    } catch (error: any) {
+      console.error("留言失敗:", error);
+      Alert.alert("留言失敗", error?.message || "請稍後再試");
     }
   };
 
@@ -825,11 +904,18 @@ export default function HomeScreen() {
                   )}
                 </View>
 
-                {post.tag && (
-                  <View style={styles.postTag}>
-                    <Text style={styles.postTagText}>#{post.tag}</Text>
-                  </View>
-                )}
+                {(() => {
+                  const postTags = getPostTags(post);
+                  return postTags.length > 0 ? (
+                    <View style={styles.postTagRow}>
+                      {postTags.map((tag) => (
+                        <View key={tag} style={styles.postTag}>
+                          <Text style={styles.postTagText}>#{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null;
+                })()}
 
                 {post.text ? (
                   <Text style={styles.postText}>{post.text}</Text>
@@ -969,11 +1055,13 @@ export default function HomeScreen() {
                     </View>
                   </View>
 
-                  {selectedPost.tag && (
-                    <View style={styles.postTag}>
-                      <Text style={styles.postTagText}>
-                        #{selectedPost.tag}
-                      </Text>
+                  {selectedPostTags.length > 0 && (
+                    <View style={styles.postTagRow}>
+                      {selectedPostTags.map((tag) => (
+                        <View key={tag} style={styles.postTag}>
+                          <Text style={styles.postTagText}>#{tag}</Text>
+                        </View>
+                      ))}
                     </View>
                   )}
 
@@ -1088,6 +1176,13 @@ export default function HomeScreen() {
                               {commentText}
                             </Text>
 
+                            {comment.imageUrl ? (
+                              <Image
+                                source={{ uri: comment.imageUrl }}
+                                style={styles.commentImageInPost}
+                              />
+                            ) : null}
+
                             <View style={styles.commentBottomRow}>
                               <Text style={styles.commentTime}>
                                 {formatTime(commentCreatedAt)}
@@ -1128,7 +1223,37 @@ export default function HomeScreen() {
               </ScrollView>
             )}
 
+            {commentImage ? (
+              <View style={styles.commentImagePreviewContainer}>
+                <Image
+                  source={{ uri: commentImage }}
+                  style={styles.commentImagePreview}
+                />
+                <TouchableOpacity
+                  style={styles.removeCommentImageBtn}
+                  onPress={() => setCommentImage(null)}
+                >
+                  <Ionicons name="close-circle" size={24} color="#ff6b6b" />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
             <View style={styles.commentInputBar}>
+              <View style={styles.commentInputActions}>
+                <TouchableOpacity
+                  style={styles.commentActionBtn}
+                  onPress={takeCommentPhoto}
+                >
+                  <Ionicons name="camera" size={20} color="#7b70c9" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.commentActionBtn}
+                  onPress={pickCommentPhoto}
+                >
+                  <Ionicons name="image" size={20} color="#7b70c9" />
+                </TouchableOpacity>
+              </View>
+
               <TextInput
                 style={styles.commentInputInPage}
                 placeholder="輸入你的留言..."
@@ -1154,7 +1279,7 @@ export default function HomeScreen() {
 interface PublishDialogProps {
   visible: boolean;
   onClose: () => void;
-  onPublish: (text: string, media: MediaType | null, tag: string) => void;
+  onPublish: (text: string, media: MediaType | null, tags: string[]) => void;
   isLoading?: boolean;
   userAvatar?: string;
   userName?: string;
@@ -1170,7 +1295,15 @@ function PublishDialog({
 }: PublishDialogProps) {
   const [postText, setPostText] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<MediaType | null>(null);
-  const [selectedTag, setSelectedTag] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prevTags) =>
+      prevTags.includes(tag)
+        ? prevTags.filter((item) => item !== tag)
+        : [...prevTags, tag],
+    );
+  };
 
   const pickPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1272,7 +1405,7 @@ function PublishDialog({
   const resetForm = () => {
     setPostText("");
     setSelectedMedia(null);
-    setSelectedTag("");
+    setSelectedTags([]);
   };
 
   const handleClose = () => {
@@ -1286,16 +1419,16 @@ function PublishDialog({
       return;
     }
 
-    if (!selectedTag) {
-      Alert.alert("請選擇標籤");
+    if (selectedTags.length === 0) {
+      Alert.alert("請選擇至少一個標籤");
       return;
     }
 
-    onPublish(postText, selectedMedia, selectedTag);
+    onPublish(postText, selectedMedia, selectedTags);
     resetForm();
   };
 
-  const canPublish = !!selectedTag && (!!postText.trim() || !!selectedMedia);
+  const canPublish = selectedTags.length > 0 && (!!postText.trim() || !!selectedMedia);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
@@ -1418,14 +1551,14 @@ function PublishDialog({
                   key={tag}
                   style={[
                     styles.tagBtn,
-                    selectedTag === tag && styles.tagBtnSelected,
+                    selectedTags.includes(tag) && styles.tagBtnSelected,
                   ]}
-                  onPress={() => setSelectedTag(tag)}
+                  onPress={() => toggleTag(tag)}
                 >
                   <Text
                     style={[
                       styles.tagText,
-                      selectedTag === tag && styles.tagTextSelected,
+                      selectedTags.includes(tag) && styles.tagTextSelected,
                     ]}
                   >
                     {tag}
@@ -1502,6 +1635,48 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderTopWidth: 0.5,
     borderTopColor: "#eee",
+  },
+  commentInputActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 10,
+  },
+  commentActionBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#f4f2fb",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 8,
+  },
+  commentActionText: {
+    fontSize: 12,
+    color: "#7b70c9",
+    marginTop: 4,
+  },
+  commentImagePreviewContainer: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    position: "relative",
+  },
+  commentImagePreview: {
+    width: "100%",
+    height: 180,
+    borderRadius: 16,
+    resizeMode: "cover",
+  },
+  removeCommentImageBtn: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+  },
+  commentImageInPost: {
+    width: "100%",
+    height: 160,
+    borderRadius: 16,
+    marginTop: 10,
+    resizeMode: "cover",
   },
   commentInputInPage: {
     flex: 1,
@@ -1687,6 +1862,12 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 14,
     marginTop: 12,
+    marginRight: 8,
+  },
+  postTagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 4,
   },
   postTagText: {
     color: "#7b70c9",

@@ -5,13 +5,13 @@ import {
     collection,
     doc,
     getDoc,
+    increment,
     onSnapshot,
     orderBy,
     query,
     serverTimestamp,
+    updateDoc,
     where,
-  updateDoc,
-  increment,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useEffect, useState } from "react";
@@ -138,32 +138,40 @@ export default function CommentModal({
     });
 
     if (!result.canceled) {
-      setCommentImage(result.assets[0].uri as string);
+      const uri = result.assets?.[0]?.uri || (result as any).uri;
+      if (uri) {
+        setCommentImage(uri as string);
+      }
     }
   };
 
   const handleSubmitComment = async () => {
-    if (!commentText.trim() && !commentImage) return;
+    const trimmedText = commentText.trim();
+    if (!trimmedText && !commentImage) return;
 
     setIsLoading(true);
     try {
       let imageUrl = null;
 
       // 上傳圖片
-      if (commentImage && commentImage.startsWith("file")) {
-        const blob = await new Promise<Blob>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.onload = () => resolve(xhr.response as Blob);
-          xhr.onerror = () => reject(new Error("上傳失敗"));
-          xhr.responseType = "blob";
-          xhr.open("GET", commentImage, true);
-          xhr.send(null);
-        });
+      if (commentImage) {
+        if (commentImage.startsWith("file")) {
+          const blob = await new Promise<Blob>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.onload = () => resolve(xhr.response as Blob);
+            xhr.onerror = () => reject(new Error("上傳失敗"));
+            xhr.responseType = "blob";
+            xhr.open("GET", commentImage, true);
+            xhr.send(null);
+          });
 
-        const filename = `comments/${userDeviceId}_${Date.now()}.jpg`;
-        const storageRef = ref(storage, filename);
-        const snapshot = await uploadBytes(storageRef, blob as Blob);
-        imageUrl = await getDownloadURL(snapshot.ref);
+          const filename = `comments/${userDeviceId}_${Date.now()}.jpg`;
+          const storageRef = ref(storage, filename);
+          const snapshot = await uploadBytes(storageRef, blob as Blob);
+          imageUrl = await getDownloadURL(snapshot.ref);
+        } else {
+          imageUrl = commentImage;
+        }
       }
 
       // 新增留言
@@ -171,7 +179,7 @@ export default function CommentModal({
         messageId: post.id,
         toDeviceId: post.deviceId,
         fromDeviceId: userDeviceId,
-        replyText: commentText,
+        replyText: trimmedText,
         imageUri: imageUrl,
         createdAt: serverTimestamp(),
         isRead: false,

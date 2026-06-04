@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase/app";
+import { getAuth, signInAnonymously } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -15,8 +16,13 @@ const firebaseConfig = {
 
 // 初始化 Firebase
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+signInAnonymously(auth).catch((error) => {
+  console.warn("Firebase anonymous sign-in failed:", error);
+});
 
 // 匯出資料庫，讓 App.js 可以使用
 const db = getFirestore(app);
 const storage = getStorage(app);
-export { db, storage };
+export { auth, db, storage };

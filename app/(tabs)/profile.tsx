@@ -38,6 +38,8 @@ export default function ProfilePage() {
   const [tempId, setTempId] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
+  const [postDays, setPostDays] = useState<Record<string, boolean>>({});
 
   // 數據統計狀態
   const [stats, setStats] = useState({
@@ -68,6 +70,7 @@ export default function ProfilePage() {
       let sentComments = snapMyReplies.size;
       let receivedPostLikes = 0;
       let receivedCommentLikes = 0;
+      const myPosts: any[] = [];
 
       snapPosts.forEach((docSnap) => {
         const post = docSnap.data();
@@ -76,6 +79,7 @@ export default function ProfilePage() {
         if (isMyPost) {
           sentPosts += 1;
           receivedPostLikes += post.likes || 0;
+          myPosts.push(post);
         }
 
         const comments = Array.isArray(post.comments) ? post.comments : [];
@@ -93,9 +97,59 @@ export default function ProfilePage() {
         receivedPostLikes,
         receivedCommentLikes,
       });
+      setPostDays(getPostDaysFromPosts(myPosts));
     } catch (e) {
       console.error("[Profile] Stats error:", e);
     }
+  };
+
+  const formatDayKey = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+      date.getDate(),
+    ).padStart(2, "0")}`;
+
+  const parsePostDate = (createdAt: any) => {
+    if (!createdAt) return null;
+    if (createdAt.toDate) return createdAt.toDate();
+    if (typeof createdAt === "string") return new Date(createdAt);
+    return new Date(createdAt);
+  };
+
+  const getPostDaysFromPosts = (posts: any[]) => {
+    const days: Record<string, boolean> = {};
+    posts.forEach((post) => {
+      const createdAt = parsePostDate(post.createdAt);
+      if (!createdAt) return;
+      const key = formatDayKey(createdAt);
+      days[key] = true;
+    });
+    return days;
+  };
+
+  const getMonthMatrix = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+
+    const matrix: Array<Array<number | null>> = [];
+    const startWeekday = firstDay.getDay();
+    let currentDay = 1 - startWeekday;
+
+    while (currentDay <= lastDay.getDate()) {
+      const week: Array<number | null> = [];
+      for (let i = 0; i < 7; i += 1) {
+        if (currentDay < 1 || currentDay > lastDay.getDate()) {
+          week.push(null);
+        } else {
+          week.push(currentDay);
+        }
+        currentDay += 1;
+      }
+      matrix.push(week);
+    }
+
+    return matrix;
   };
 
   useFocusEffect(
@@ -302,6 +356,84 @@ export default function ProfilePage() {
             <Text style={styles.statValue}>{stats.receivedCommentLikes}</Text>
           </View>
         </View>
+
+        <View style={styles.calendarCard}>
+          <View style={styles.calendarHeader}>
+            <TouchableOpacity
+              onPress={() =>
+                setCalendarMonth(
+                  (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1),
+                )
+              }
+            >
+              <MaterialIcons name="chevron-left" size={24} color="#333" />
+            </TouchableOpacity>
+            <Text style={styles.calendarTitle}>
+              {calendarMonth.toLocaleDateString("zh-TW", {
+                year: "numeric",
+                month: "long",
+              })}
+            </Text>
+            <TouchableOpacity
+              onPress={() =>
+                setCalendarMonth(
+                  (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1),
+                )
+              }
+            >
+              <MaterialIcons name="chevron-right" size={24} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.weekdayRow}>
+            {['日', '一', '二', '三', '四', '五', '六'].map((label) => (
+              <Text key={label} style={styles.weekdayText}>
+                {label}
+              </Text>
+            ))}
+          </View>
+
+          {getMonthMatrix(calendarMonth).map((week, index) => (
+            <View key={`week-${index}`} style={styles.weekRow}>
+              {week.map((day, dayIndex) => {
+                const dayKey =
+                  day != null
+                    ? formatDayKey(new Date(
+                        calendarMonth.getFullYear(),
+                        calendarMonth.getMonth(),
+                        day,
+                      ))
+                    : "";
+                const hasPost = day != null && postDays[dayKey];
+                const today =
+                  day != null &&
+                  day === new Date().getDate() &&
+                  calendarMonth.getMonth() === new Date().getMonth() &&
+                  calendarMonth.getFullYear() === new Date().getFullYear();
+
+                return (
+                  <View key={`day-${dayIndex}`} style={styles.dayCell}>
+                    {day ? (
+                      <View style={styles.dayInner}>
+                        <Text style={[styles.dayText, today && styles.todayDayText]}>
+                          {day}
+                        </Text>
+                        {hasPost ? (
+                          <Image
+                            source={require("../../assets/plant/mood1/mood1-5.png")}
+                            style={styles.moodIcon}
+                          />
+                        ) : null}
+                      </View>
+                    ) : (
+                      <View style={styles.emptyDay} />
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+        </View>
       </View>
     </ScrollView>
   );
@@ -391,6 +523,73 @@ const styles = StyleSheet.create({
     color: "#333",
     fontWeight: "bold",
     marginBottom: 10,
+  },
+  calendarCard: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 20,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  calendarHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  calendarTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#333",
+  },
+  weekdayRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    marginLeft: -16,
+  },
+  weekdayText: {
+    width: (width - 50) / 7,
+    textAlign: "center",
+    color: "#999",
+    fontSize: 12,
+  },
+  weekRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    marginLeft: -16,
+  },
+  dayCell: {
+    width: (width - 50) / 7,
+    minHeight: 50,
+    alignItems: "center",
+  },
+  dayInner: {
+    alignItems: "center",
+  },
+  dayText: {
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 6,
+  },
+  todayDayText: {
+    color: "#7b70c9",
+    fontWeight: "700",
+  },
+  emptyDay: {
+    width: (width - 50) / 7,
+    height: 30,
+  },
+  moodIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
   statValue: { fontSize: 32, color: "#d1a07a", fontWeight: "300" },
 });
