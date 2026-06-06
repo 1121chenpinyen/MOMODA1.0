@@ -25,6 +25,11 @@ import {
 } from "react-native";
 import FlowerCard from "../../components/FlowerCard";
 import { db } from "../../config/firebaseConfig";
+import {
+  DEFAULT_PLANT_IMAGE_OFFSETS,
+  DEFAULT_PLANT_IMAGE_SIZES,
+  DEFAULT_PLANT_IMAGE_XOFFSETS,
+} from "../../constants/plantImageSizes";
 import { getDeviceId } from "../../utils/getDeviceId";
 import { getFallbackEmoji } from "../../utils/plantCatalog";
 import {
@@ -51,6 +56,8 @@ const BACKGROUND_ASPECT_RATIO =
 const { width, height } = Dimensions.get("window");
 const PLANT_SIZE = 120;
 const WORLD_WIDTH = width * 3;
+// Debug: 將觸碰區可視化，方便排查互相遮蔽問題（開發時使用）
+const SHOW_TOUCH_DEBUG = true;
 const BACKGROUND_HEIGHT = Math.min(
   height * 0.85,
   WORLD_WIDTH / BACKGROUND_ASPECT_RATIO,
@@ -200,14 +207,12 @@ export default function GardenScreen() {
     const replyStage = Math.max(0, Math.min(stageCount, replies));
     const stage = Math.max(replyStage, visualStage);
     const seedTouchSize = 35;
-    const width = isSeedStage ? seedTouchSize : TOUCH_FIXED_WIDTH;
+    const width = isSeedStage ? seedTouchSize : TOUCH_FIXED_WIDTH + 10;
     const height = isSeedStage ? seedTouchSize : STAGE_TOUCH_HEIGHTS[stage];
-    const left = isSeedStage
-      ? (PLANT_SIZE - width) / 2 - 2
-      : (PLANT_SIZE - width) / 2 - 2;
-    const dragTouchLift = 16;
+    const left = (PLANT_SIZE - width) / 2;
+    const dragTouchLift = 13;
     const top = isSeedStage
-      ? PLANT_SIZE - height + 15
+      ? PLANT_SIZE - height + 13 - dragTouchLift
       : PLANT_SIZE - TOUCH_BASE_BOTTOM_OFFSET - height + 20 - dragTouchLift;
     const borderColor = STAGE_BORDER_COLORS[stage] || STAGE_BORDER_COLORS[0];
     const backgroundColor = `rgba(255,255,255,${0.03 + stage * 0.03})`;
@@ -240,12 +245,51 @@ export default function GardenScreen() {
     const borderColor = STAGE_BORDER_COLORS[stage] || STAGE_BORDER_COLORS[0];
     const backgroundColor = `rgba(255,255,255,${0.03 + stage * 0.03})`;
 
+    // 若為種子階段 (tu.png)，使用較小的觸碰區並考量偏移
+    if (isSeedStage) {
+      const seedTouchSize = 70;
+      const assetIndex = 0;
+      const xOffset =
+        (typeof DEFAULT_PLANT_IMAGE_XOFFSETS !== "undefined" &&
+          DEFAULT_PLANT_IMAGE_XOFFSETS[assetIndex]) ||
+        0;
+      const yOffset =
+        (typeof DEFAULT_PLANT_IMAGE_OFFSETS !== "undefined" &&
+          DEFAULT_PLANT_IMAGE_OFFSETS[assetIndex]) ||
+        0;
+
+      const left = (PLANT_SIZE - seedTouchSize) / 2 + xOffset + 2;
+      // 把原本 locked seed top 計算邏輯對齊，並加入 image 的垂直偏移影響（簡單調整）
+      const top =
+        PLANT_SIZE -
+        seedTouchSize +
+        27 +
+        topLift +
+        (yOffset ? Math.min(yOffset, 40) / 4 : 0);
+
+      return {
+        position: "absolute",
+        width: seedTouchSize,
+        height: seedTouchSize,
+        left,
+        top,
+        zIndex: 5,
+        elevation: 5,
+        borderWidth: 2,
+        borderColor,
+        backgroundColor,
+      };
+    }
+
+    const extraDownForSprout = visualStage === 1 ? 33 : 0;
+    const extraLeftForSprout = visualStage === 1 ? -8 : 0;
+
     return {
       position: "absolute",
       width: PLANT_SIZE,
       height: PLANT_SIZE,
-      left: 0,
-      top: -topLift,
+      left: extraLeftForSprout,
+      top: -topLift + extraDownForSprout,
       zIndex: 5,
       elevation: 5,
       borderWidth: 2,
@@ -1164,11 +1208,32 @@ export default function GardenScreen() {
                     ]}
                   >
                     <View style={styles.draggablePlant} pointerEvents="none">
-                      <FlowerCard plant={plant} />
+                      <FlowerCard
+                        plant={plant}
+                        imageSizes={DEFAULT_PLANT_IMAGE_SIZES}
+                        imageOffsets={DEFAULT_PLANT_IMAGE_OFFSETS}
+                        imageXOffsets={DEFAULT_PLANT_IMAGE_XOFFSETS}
+                      />
                     </View>
 
                     <TouchableOpacity
-                      style={[styles.touchArea, getLockedTouchStyle(plant)]}
+                      style={[
+                        styles.touchArea,
+                        getLockedTouchStyle(plant),
+                        {
+                          zIndex:
+                            Math.round(pos.y) + (isActiveDrag ? 10000 : 0) + 2,
+                          elevation:
+                            Math.round(pos.y) + (isActiveDrag ? 10000 : 0) + 2,
+                        },
+                        SHOW_TOUCH_DEBUG && isActiveDrag
+                          ? {
+                              backgroundColor: "rgba(255,0,0,0.12)",
+                              borderWidth: 1,
+                              borderColor: "rgba(255,0,0,0.22)",
+                            }
+                          : {},
+                      ]}
                       activeOpacity={0.9}
                       onPress={() => runOpenFocusAnimation(plant)}
                     />
@@ -1193,11 +1258,32 @@ export default function GardenScreen() {
                     ]}
                   >
                     <View style={styles.draggablePlant} pointerEvents="none">
-                      <FlowerCard plant={plant} />
+                      <FlowerCard
+                        plant={plant}
+                        imageSizes={DEFAULT_PLANT_IMAGE_SIZES}
+                        imageOffsets={DEFAULT_PLANT_IMAGE_OFFSETS}
+                        imageXOffsets={DEFAULT_PLANT_IMAGE_XOFFSETS}
+                      />
                     </View>
 
                     <View
-                      style={[styles.dragTouchArea, getDragTouchStyle(plant)]}
+                      style={[
+                        styles.dragTouchArea,
+                        getDragTouchStyle(plant),
+                        {
+                          zIndex:
+                            Math.round(pos.y) + (isActiveDrag ? 10000 : 0) + 2,
+                          elevation:
+                            Math.round(pos.y) + (isActiveDrag ? 10000 : 0) + 2,
+                        },
+                        SHOW_TOUCH_DEBUG && isActiveDrag
+                          ? {
+                              backgroundColor: "rgba(0,0,255,0.08)",
+                              borderWidth: 1,
+                              borderColor: "rgba(0,0,255,0.12)",
+                            }
+                          : {},
+                      ]}
                       {...(panResponder.panHandlers as any)}
                     />
 
