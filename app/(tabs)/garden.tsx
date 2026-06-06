@@ -258,19 +258,19 @@ export default function GardenScreen() {
           DEFAULT_PLANT_IMAGE_OFFSETS[assetIndex]) ||
         0;
 
-      const left = (PLANT_SIZE - seedTouchSize) / 2 + xOffset + 2;
+      const left = (PLANT_SIZE - seedTouchSize) / 2 + xOffset - 22;
       // 把原本 locked seed top 計算邏輯對齊，並加入 image 的垂直偏移影響（簡單調整）
       const top =
         PLANT_SIZE -
-        seedTouchSize +
-        27 +
+        seedTouchSize -
+        11 +
         topLift +
         (yOffset ? Math.min(yOffset, 40) / 4 : 0);
 
       return {
         position: "absolute",
-        width: seedTouchSize,
-        height: seedTouchSize,
+        width: seedTouchSize + 50,
+        height: seedTouchSize + 50,
         left,
         top,
         zIndex: 5,
@@ -282,7 +282,8 @@ export default function GardenScreen() {
     }
 
     const extraDownForSprout = visualStage === 1 ? 33 : 0;
-    const extraLeftForSprout = visualStage === 1 ? -8 : 0;
+    // 發芽以上 (visualStage >= 1) 時，將拖曳觸碰區往右偏移一點
+    const extraLeftForSprout = visualStage >= 1 ? -1 : 0;
 
     return {
       position: "absolute",
