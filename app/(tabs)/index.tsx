@@ -2,49 +2,48 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import {
-  addDoc,
-  arrayUnion,
-  collection,
-  deleteDoc,
-  doc,
-  increment,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where
+    addDoc,
+    arrayUnion,
+    collection,
+    deleteDoc,
+    doc,
+    increment,
+    onSnapshot,
+    orderBy,
+    query,
+    serverTimestamp,
+    updateDoc,
+    where
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Keyboard,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 
+import PostDetailModal from "../../components/PostDetailModal";
 import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
 import { getRandomVariantForTag } from "../../utils/plantCatalog";
 import {
-  claimPendingPlantGrowth,
-  claimPendingRewardsOnce,
-  createPlantForPost,
-  getGarden,
-  getGlobalData,
-  growPlant,
-  updateGlobalData,
+    claimPendingPlantGrowth,
+    claimPendingRewardsOnce,
+    createPlantForPost,
+    getGarden,
+    getGlobalData,
+    growPlant,
+    updateGlobalData,
 } from "../../utils/storage";
 
 const TAGS = [
@@ -1002,227 +1001,21 @@ export default function HomeScreen() {
         userName={currentUser.name}
       />
 
-      <Modal
+      <PostDetailModal
         visible={commentVisible}
-        animationType="slide"
-        onRequestClose={() => setCommentVisible(false)}
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
-        >
-          <SafeAreaView style={styles.postDetailContainer}>
-            <View style={styles.postDetailHeader}>
-              <TouchableOpacity
-                onPress={() => {
-                  setCommentVisible(false);
-                  setSelectedPost(null);
-                }}
-              >
-                <Ionicons name="chevron-back" size={26} color="#333" />
-              </TouchableOpacity>
-
-              <Text style={styles.postDetailTitle}>貼文留言</Text>
-
-              <View style={{ width: 26 }} />
-            </View>
-
-            {selectedPost && (
-              <ScrollView
-                style={styles.postDetailContent}
-                keyboardShouldPersistTaps="handled"
-              >
-                <View style={styles.postDetailCard}>
-                  <View style={styles.postHeader}>
-                    <View style={styles.authorArea}>
-                      {renderAvatar(
-                        profileMap[selectedPost.authorId || ""]?.avatar ||
-                          selectedPost.authorAvatar,
-                        40,
-                      )}
-
-                      <View style={{ marginLeft: 10 }}>
-                        <Text style={styles.authorName}>
-                          {profileMap[selectedPost.authorId || ""]?.name ||
-                            selectedPost.authorName ||
-                            "匿名小夥伴"}
-                        </Text>
-                        <Text style={styles.postTime}>
-                          {formatTime(selectedPost.createdAt)}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {selectedPostTags.length > 0 && (
-                    <View style={styles.postTagRow}>
-                      {selectedPostTags.map((tag) => (
-                        <View key={tag} style={styles.postTag}>
-                          <Text style={styles.postTagText}>#{tag}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {selectedPost.text ? (
-                    <Text style={styles.postText}>{selectedPost.text}</Text>
-                  ) : null}
-
-                  {selectedPost.media &&
-                    selectedPost.media.type === "photo" && (
-                      <Image
-                        source={{ uri: selectedPost.media.url }}
-                        style={styles.postImage}
-                      />
-                    )}
-
-                  {selectedPost.media &&
-                    selectedPost.media.type === "video" && (
-                      <View style={styles.videoBox}>
-                        <Ionicons name="videocam" size={36} color="#fff" />
-                        <Text style={styles.videoText}>影片貼文</Text>
-                      </View>
-                    )}
-                </View>
-
-                <View style={styles.detailCommentSection}>
-                  <View style={styles.commentSortHeader}>
-                    <Text style={styles.detailCommentTitle}>留言</Text>
-
-                    <View style={styles.commentSortBtns}>
-                      <TouchableOpacity
-                        style={[
-                          styles.commentSortBtn,
-                          commentSortMode === "new" &&
-                            styles.commentSortBtnActive,
-                        ]}
-                        onPress={() => setCommentSortMode("new")}
-                      >
-                        <Text
-                          style={[
-                            styles.commentSortText,
-                            commentSortMode === "new" &&
-                              styles.commentSortTextActive,
-                          ]}
-                        >
-                          最新
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.commentSortBtn,
-                          commentSortMode === "likes" &&
-                            styles.commentSortBtnActive,
-                        ]}
-                        onPress={() => setCommentSortMode("likes")}
-                      >
-                        <Text
-                          style={[
-                            styles.commentSortText,
-                            commentSortMode === "likes" &&
-                              styles.commentSortTextActive,
-                          ]}
-                        >
-                          讚數最高
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {(selectedPost.comments || []).length === 0 ? (
-                    <View style={styles.noCommentBox}>
-                      <Ionicons
-                        name="chatbubble-ellipses-outline"
-                        size={42}
-                        color="#c7c1ea"
-                      />
-                      <Text style={styles.noCommentText}>目前沒有留言</Text>
-                    </View>
-                  ) : (
-                    sortedComments.map((comment: any, index: number) => {
-                      const commentText =
-                        typeof comment === "string" ? comment : comment.text;
-
-                      const commentUserName =
-                        typeof comment === "string"
-                          ? "匿名小夥伴"
-                          : comment.userName || "匿名小夥伴";
-
-                      const commentUserAvatar =
-                        typeof comment === "string"
-                          ? ""
-                          : comment.userAvatar || "";
-
-                      const commentCreatedAt =
-                        typeof comment === "string" ? null : comment.createdAt;
-
-                      return (
-                        <View
-                          key={
-                            comment.id || `${selectedPost.id}-comment-${index}`
-                          }
-                          style={styles.commentItem}
-                        >
-                          {renderAvatar(commentUserAvatar, 32)}
-
-                          <View style={styles.commentContent}>
-                            <Text style={styles.commentUserName}>
-                              {commentUserName}
-                            </Text>
-
-                            <Text style={styles.commentText}>
-                              {commentText}
-                            </Text>
-
-                            {comment.imageUrl ? (
-                              <Image
-                                source={{ uri: comment.imageUrl }}
-                                style={styles.commentImageInPost}
-                              />
-                            ) : null}
-
-                            <View style={styles.commentBottomRow}>
-                              <Text style={styles.commentTime}>
-                                {formatTime(commentCreatedAt)}
-                              </Text>
-
-                              <TouchableOpacity
-                                onPress={() => handleLikeComment(comment.id)}
-                                style={styles.commentLikeBtn}
-                              >
-                                <Ionicons
-                                  name={
-                                    (comment.likedBy || []).includes(
-                                      currentUser.userId,
-                                    )
-                                      ? "heart"
-                                      : "heart-outline"
-                                  }
-                                  size={16}
-                                  color={
-                                    (comment.likedBy || []).includes(
-                                      currentUser.userId,
-                                    )
-                                      ? "#ff4f7b"
-                                      : "#999"
-                                  }
-                                />
-                                <Text style={styles.commentLikeText}>
-                                  {comment.likes || 0}
-                                </Text>
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        </View>
-                      );
-                    })
-                  )}
-                </View>
-              </ScrollView>
-            )}
-
+        post={selectedPost}
+        onClose={() => {
+          setCommentVisible(false);
+          setSelectedPost(null);
+        }}
+        profileMap={profileMap}
+        sortedComments={sortedComments}
+        commentSortMode={commentSortMode}
+        onCommentSortChange={setCommentSortMode}
+        onLikeComment={handleLikeComment}
+        showCommentInput={true}
+        renderCommentInput={() => (
+          <>
             {commentImage ? (
               <View style={styles.commentImagePreviewContainer}>
                 <Image
@@ -1269,9 +1062,9 @@ export default function HomeScreen() {
                 <Ionicons name="send" size={20} color="#fff" />
               </TouchableOpacity>
             </View>
-          </SafeAreaView>
-        </KeyboardAvoidingView>
-      </Modal>
+          </>
+        )}
+      />
     </SafeAreaView>
   );
 }
