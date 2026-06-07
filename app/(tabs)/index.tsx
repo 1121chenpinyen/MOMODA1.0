@@ -1008,6 +1008,7 @@ export default function HomeScreen() {
           setCommentVisible(false);
           setSelectedPost(null);
         }}
+        currentUserId={currentUser.userId}
         profileMap={profileMap}
         sortedComments={sortedComments}
         commentSortMode={commentSortMode}

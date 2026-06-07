@@ -3,41 +3,41 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import {
-  arrayUnion,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  increment,
-  query,
-  setDoc,
-  updateDoc,
-  where
+    arrayUnion,
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    increment,
+    query,
+    setDoc,
+    updateDoc,
+    where
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  Image,
-  Keyboard,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    Image,
+    Keyboard,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import PostDetailModal from "../../components/PostDetailModal";
 import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
 import {
-  getGarden,
-  getGlobalData,
-  growPlant,
-  updateGlobalData
+    getGarden,
+    getGlobalData,
+    growPlant,
+    updateGlobalData
 } from "../../utils/storage";
 
 const { width } = Dimensions.get("window");
@@ -719,11 +719,11 @@ export default function ProfilePage() {
             setCommentText("");
             setCommentImage(null);
           }}
+          currentUserId={userId}
           profileMap={profileMap}
           sortedComments={sortedComments}
           commentSortMode={commentSortMode}
           onCommentSortChange={setCommentSortMode}
-          onLikeComment={handleLikeComment}
           showCommentInput={true}
           renderCommentInput={() => (
             <>

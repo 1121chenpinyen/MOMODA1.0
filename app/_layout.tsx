@@ -1,5 +1,5 @@
-import { MoneyProvider } from '../context/moneyContext';
 import { Stack } from 'expo-router';
+import { MoneyProvider } from '../context/moneyContext';
 
 export default function RootLayout() {
   return (
