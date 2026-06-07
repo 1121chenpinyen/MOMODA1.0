@@ -54,18 +54,16 @@ const BACKGROUND_ASPECT_RATIO =
     : 1;
 
 const { width, height } = Dimensions.get("window");
-const PLANT_SIZE = 120;
+const PLANT_SIZE = 10;
 const WORLD_WIDTH = width * 3;
-// Debug: 將觸碰區可視化，方便排查互相遮蔽問題（開發時使用）
-const SHOW_TOUCH_DEBUG = true;
-const BACKGROUND_HEIGHT = Math.min(
-  height * 0.85,
-  WORLD_WIDTH / BACKGROUND_ASPECT_RATIO,
-);
+const BACKGROUND_HEIGHT = WORLD_WIDTH / BACKGROUND_ASPECT_RATIO;
+const MAX_CAMERA_SCALE = 2.2;
+// 當聚焦時，畫面中心的垂直偏移量（正值會把植物往上移動至視窗中心上方）
+const FOCUS_SCREEN_OFFSET_Y = 80;
 
 const getUnlockedZoneCount = (plantCount: number) => {
-  if (plantCount >= 100) return 3;
-  if (plantCount >= 50) return 2;
+  if (plantCount >= 40) return 3;
+  if (plantCount >= 20) return 2;
   return 1;
 };
 
@@ -81,6 +79,20 @@ const getCameraBounds = (plantCount: number) => {
   }
 
   return { min: -width * 2, max: 0 };
+};
+
+const getUnlockedZoneSpan = (plantCount: number) => {
+  const zoneCount = getUnlockedZoneCount(plantCount);
+
+  if (zoneCount === 1) {
+    return { start: width, end: width * 2 };
+  }
+
+  if (zoneCount === 2) {
+    return { start: 0, end: width * 2 };
+  }
+
+  return { start: 0, end: WORLD_WIDTH };
 };
 
 const getPlantXBounds = (plantCount: number) => {
@@ -122,7 +134,6 @@ export default function GardenScreen() {
   const [focusedPost, setFocusedPost] = useState<any | null>(null);
   const [loadingPost, setLoadingPost] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
-  const [gardenAreaHeight, setGardenAreaHeight] = useState<number>(height);
   const [gardenAreaLayout, setGardenAreaLayout] = useState({
     width,
     height,
@@ -137,8 +148,26 @@ export default function GardenScreen() {
   const focusCardOpacity = useRef(new Animated.Value(0)).current;
   const focusCardScale = useRef(new Animated.Value(0.96)).current;
   const scenePanX = useRef(new Animated.Value(-width)).current;
+  const scenePanY = useRef(new Animated.Value(0)).current;
+  const cameraScale = useRef(new Animated.Value(1)).current;
   const scenePanXRef = useRef(-width);
+  const scenePanYRef = useRef(0);
   const scenePanStartXRef = useRef(-width);
+  const scenePanStartYRef = useRef(0);
+  const cameraScaleRef = useRef(1);
+  const preFocusCameraRef = useRef<{
+    x: number;
+    y: number;
+    scale: number;
+  } | null>(null);
+  const pinchDistanceRef = useRef<number | null>(null);
+  const pinchStartScaleRef = useRef(1);
+  const focusZoomScaleRef = useRef(1);
+  const zoomTranslateXRef = useRef(0);
+  const zoomTranslateYRef = useRef(0);
+  const plantTouchRefs = useRef<Record<string, any>>({});
+  const sceneViewportRef = useRef<any>(null);
+  const panAnimationCancelRef = useRef(false);
 
   const [plantPositions, setPlantPositions] = useState<
     Record<string, { x: number; y: number }>
@@ -166,6 +195,93 @@ export default function GardenScreen() {
   const pendingDragResetPlantIdRef = useRef<string | null>(null);
   const [dragResetToken, setDragResetToken] = useState(0);
   const mountedRef = useRef(true);
+  const hasInitializedCameraRef = useRef(false);
+  const hasUnlockedPlantsRef = useRef(false);
+
+  const sceneContentHeight = Math.max(
+    BACKGROUND_HEIGHT,
+    gardenAreaLayout.height,
+  );
+
+  const getMinCameraScale = useCallback(() => {
+    const viewportHeight = Math.max(1, gardenAreaLayout.height);
+    return Math.min(1, viewportHeight / Math.max(sceneContentHeight, 1));
+  }, [gardenAreaLayout.height, sceneContentHeight]);
+
+  const clampCamera = useCallback(
+    (
+      x: number,
+      y: number,
+      scale: number,
+      plantCount: number,
+      allowOverflow = false,
+    ) => {
+      const viewportWidth = Math.max(1, gardenAreaLayout.width);
+      const viewportHeight = Math.max(1, gardenAreaLayout.height);
+      const worldWidthScaled = WORLD_WIDTH * scale;
+      const worldHeightScaled = sceneContentHeight * scale;
+
+      // Allow camera to move slightly beyond the background bounds so
+      // selected plants can be centered even near edges.
+      const OVERFLOW_MARGIN_X = allowOverflow ? viewportWidth : 0; // allow one viewport when requested
+      const OVERFLOW_MARGIN_Y = allowOverflow ? viewportHeight : 0;
+
+      const worldMinX = viewportWidth - worldWidthScaled - OVERFLOW_MARGIN_X;
+      const worldMaxX = 0 + OVERFLOW_MARGIN_X;
+      const worldMinY = viewportHeight - worldHeightScaled - OVERFLOW_MARGIN_Y;
+      const worldMaxY = 0 + OVERFLOW_MARGIN_Y;
+
+      // Previously we limited camera to unlocked zones. That prevented
+      // panning into locked (right-side) regions. Allow full-world panning
+      // (subject to overflow margins) so user can center plants near edges.
+      const minX = worldMinX;
+      const maxX = worldMaxX;
+      const clampedX =
+        minX <= maxX
+          ? Math.max(minX, Math.min(x, maxX))
+          : Math.max(worldMinX, Math.min(x, worldMaxX));
+      const clampedY =
+        worldMinY <= worldMaxY
+          ? Math.max(worldMinY, Math.min(y, worldMaxY))
+          : 0;
+
+      return {
+        x: clampedX,
+        y: clampedY,
+      };
+    },
+    [gardenAreaLayout.height, gardenAreaLayout.width, sceneContentHeight],
+  );
+
+  const applyCamera = useCallback(
+    (
+      x: number,
+      y: number,
+      scale: number,
+      plantCount: number,
+      allowOverflow = false,
+    ) => {
+      const minScale = getMinCameraScale();
+      const nextScale = Math.max(minScale, Math.min(scale, MAX_CAMERA_SCALE));
+      const clamped = clampCamera(x, y, nextScale, plantCount, allowOverflow);
+
+      scenePanXRef.current = clamped.x;
+      scenePanYRef.current = clamped.y;
+      cameraScaleRef.current = nextScale;
+
+      scenePanX.setValue(clamped.x);
+      scenePanY.setValue(clamped.y);
+      cameraScale.setValue(nextScale);
+    },
+    [cameraScale, clampCamera, getMinCameraScale, scenePanX, scenePanY],
+  );
+
+  useEffect(() => {
+    const plants = garden?.plants || [];
+    hasUnlockedPlantsRef.current = plants.some(
+      (plant: any) => !lockedPlants.has(plant.id),
+    );
+  }, [garden?.plants, lockedPlants]);
 
   const getAnimatedPlantPosition = (plantId: string) => {
     if (!plantAnimatedPositionsRef.current[plantId]) {
@@ -178,125 +294,99 @@ export default function GardenScreen() {
     return plantAnimatedPositionsRef.current[plantId];
   };
 
+  useEffect(() => {
+    const zoomScaleListener = zoomScale.addListener(({ value }) => {
+      focusZoomScaleRef.current = value;
+    });
+    const zoomXListener = zoomTranslateX.addListener(({ value }) => {
+      zoomTranslateXRef.current = value;
+    });
+    const zoomYListener = zoomTranslateY.addListener(({ value }) => {
+      zoomTranslateYRef.current = value;
+    });
+
+    return () => {
+      zoomScale.removeListener(zoomScaleListener);
+      zoomTranslateX.removeListener(zoomXListener);
+      zoomTranslateY.removeListener(zoomYListener);
+    };
+  }, [zoomScale, zoomTranslateX, zoomTranslateY]);
+
   // 設定不同成長階段的觸碰區高度
   // 需求：每收到 1 次回覆就升 1 階（最多 5 階），且只在 Y 軸變大
   const TOUCH_BASE_BOTTOM_OFFSET = 10; // distance from bottom of plant container to bottom edge of touch area
   const TOUCH_FIXED_WIDTH = 25;
   const STAGE_TOUCH_HEIGHTS = [30, 30, 40, 50, 75, 100];
-  const STAGE_BORDER_COLORS = [
-    "rgba(0,150,136,0.9)",
-    "rgba(30,136,229,0.9)",
-    "rgba(255,193,7,0.95)",
-    "rgba(255, 131, 7, 0.95)",
-    "rgba(233,30,99,0.95)",
-    "rgba(76,175,80,0.95)",
-  ];
   const getLockedTouchStyle = (plant: any) => {
     const replies =
       typeof plant?.repliesCount === "number" ? plant.repliesCount : 0;
     const imageIndex =
       typeof plant?.imageIndex === "number" ? plant.imageIndex : -1;
+    const plantType = typeof plant?.type === "string" ? plant.type : "";
     const isSeedStage = imageIndex === -1;
     const visualStage = Math.max(
       0,
       Math.min(5, Math.abs(imageIndex || -1) - 1),
     );
+    const isEat2FinalFlower = plantType === "eat2" && imageIndex <= -6;
 
     // 每收到 1 則回覆，觸碰區升 1 階；施肥一次成長兩格，所以視覺階段直接跳兩階
     const stageCount = STAGE_TOUCH_HEIGHTS.length - 1;
     const replyStage = Math.max(0, Math.min(stageCount, replies));
     const stage = Math.max(replyStage, visualStage);
     const seedTouchSize = 35;
-    const width = isSeedStage ? seedTouchSize : TOUCH_FIXED_WIDTH + 10;
-    const height = isSeedStage ? seedTouchSize : STAGE_TOUCH_HEIGHTS[stage];
+    const width = isSeedStage
+      ? seedTouchSize
+      : isEat2FinalFlower
+        ? TOUCH_FIXED_WIDTH + 65
+        : TOUCH_FIXED_WIDTH + 10;
+    const height = isSeedStage
+      ? seedTouchSize
+      : STAGE_TOUCH_HEIGHTS[stage] + 10;
     const left = (PLANT_SIZE - width) / 2;
     const dragTouchLift = 13;
     const top = isSeedStage
-      ? PLANT_SIZE - height + 13 - dragTouchLift
-      : PLANT_SIZE - TOUCH_BASE_BOTTOM_OFFSET - height + 20 - dragTouchLift;
-    const borderColor = STAGE_BORDER_COLORS[stage] || STAGE_BORDER_COLORS[0];
-    const backgroundColor = `rgba(255,255,255,${0.03 + stage * 0.03})`;
+      ? PLANT_SIZE - height + 25 - dragTouchLift
+      : PLANT_SIZE - TOUCH_BASE_BOTTOM_OFFSET - height - 10 - dragTouchLift;
     const out = {
       width,
       height,
       left,
       top,
-      borderColor,
-      backgroundColor,
-      borderWidth: 2,
     };
-    return out;
-  };
 
-  const getDragTouchStyle = (plant: any) => {
-    const replies =
-      typeof plant?.repliesCount === "number" ? plant.repliesCount : 0;
-    const imageIndex =
-      typeof plant?.imageIndex === "number" ? plant.imageIndex : -1;
-    const isSeedStage = imageIndex === -1;
-    const visualStage = Math.max(
-      0,
-      Math.min(5, Math.abs(imageIndex || -1) - 1),
-    );
-    const stageCount = STAGE_TOUCH_HEIGHTS.length - 1;
-    const replyStage = Math.max(0, Math.min(stageCount, replies));
-    const stage = Math.max(replyStage, visualStage);
-    const topLift = isSeedStage ? -5 : -10;
-    const borderColor = STAGE_BORDER_COLORS[stage] || STAGE_BORDER_COLORS[0];
-    const backgroundColor = `rgba(255,255,255,${0.03 + stage * 0.03})`;
+    // 預設每階段的 top 偏移（單位 px）
+    // 發芽(1): -10, 幼苗(2): -5, 小草(3): +3, 小花(4): +8, 花(5): +20
+    const STAGE_DEFAULT_TOP_OFFSETS: Record<number, number> = {
+      1: -10,
+      2: -3,
+      3: 5,
+      4: 15,
+      5: 28,
+    };
 
-    // 若為種子階段 (tu.png)，使用較小的觸碰區並考量偏移
-    if (isSeedStage) {
-      const seedTouchSize = 70;
-      const assetIndex = 0;
-      const xOffset =
-        (typeof DEFAULT_PLANT_IMAGE_XOFFSETS !== "undefined" &&
-          DEFAULT_PLANT_IMAGE_XOFFSETS[assetIndex]) ||
-        0;
-      const yOffset =
-        (typeof DEFAULT_PLANT_IMAGE_OFFSETS !== "undefined" &&
-          DEFAULT_PLANT_IMAGE_OFFSETS[assetIndex]) ||
-        0;
-
-      const left = (PLANT_SIZE - seedTouchSize) / 2 + xOffset - 22;
-      // 把原本 locked seed top 計算邏輯對齊，並加入 image 的垂直偏移影響（簡單調整）
-      const top =
-        PLANT_SIZE -
-        seedTouchSize -
-        11 +
-        topLift +
-        (yOffset ? Math.min(yOffset, 40) / 4 : 0);
-
-      return {
-        position: "absolute",
-        width: seedTouchSize + 50,
-        height: seedTouchSize + 50,
-        left,
-        top,
-        zIndex: 5,
-        elevation: 5,
-        borderWidth: 2,
-        borderColor,
-        backgroundColor,
+    // 支援 per-plant 覆寫：
+    // plant.touchOverride: { left?, top?, width?, height? }
+    // plant.touchStageOverrides: { [stageNumber]: { left?, top?, width?, height? } }
+    try {
+      const globalOverride = plant?.touchOverride || null;
+      const stageOverride = (plant?.touchStageOverrides || {})[stage] || null;
+      const merged = {
+        ...out,
+        ...(globalOverride || {}),
+        ...(stageOverride || {}),
       };
+
+      // 套用階段預設 top 偏移（若該階段有設定）
+      const stageOffset = STAGE_DEFAULT_TOP_OFFSETS[stage] || 0;
+      if (typeof merged.top === "number") {
+        merged.top = merged.top + stageOffset;
+      }
+
+      return merged;
+    } catch (e) {
+      return out;
     }
-
-    const extraDownForSprout = visualStage === 1 ? 33 : 0;
-    // 發芽以上 (visualStage >= 1) 時，將拖曳觸碰區往右偏移一點
-    const extraLeftForSprout = visualStage >= 1 ? -1 : 0;
-
-    return {
-      position: "absolute",
-      width: PLANT_SIZE,
-      height: PLANT_SIZE,
-      left: extraLeftForSprout,
-      top: -topLift + extraDownForSprout,
-      zIndex: 5,
-      elevation: 5,
-      borderWidth: 2,
-      borderColor,
-      backgroundColor,
-    };
   };
 
   const loadGarden = useCallback(async () => {
@@ -362,9 +452,15 @@ export default function GardenScreen() {
       setGarden(refreshedGardenData);
       setWaterDrops(globalData.waterDrops || 0);
 
-      if (!plantFocusVisible) {
-        scenePanXRef.current = -width;
-        scenePanX.setValue(-width);
+      if (!plantFocusVisible && !hasInitializedCameraRef.current) {
+        applyCamera(
+          -width,
+          0,
+          1,
+          refreshedGardenData.plants?.length || 0,
+          false,
+        );
+        hasInitializedCameraRef.current = true;
       }
 
       const positions: Record<string, { x: number; y: number }> =
@@ -372,7 +468,7 @@ export default function GardenScreen() {
       const zoneCount = getUnlockedZoneCount(
         refreshedGardenData.plants?.length || 0,
       );
-      const maxVisibleY = Math.max(0, gardenAreaHeight - PLANT_SIZE);
+      const maxVisibleY = Math.max(0, sceneContentHeight - PLANT_SIZE);
 
       refreshedGardenData.plants?.forEach((plant: any, index: number) => {
         if (!positions[plant.id]) {
@@ -406,7 +502,7 @@ export default function GardenScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyCamera, plantFocusVisible, sceneContentHeight]);
 
   useEffect(() => {
     loadGarden();
@@ -423,17 +519,20 @@ export default function GardenScreen() {
   }, [loadGarden]);
 
   useEffect(() => {
-    const bounds = getCameraBounds(garden?.plants?.length || 0);
-    const clampedX = Math.max(
-      bounds.min,
-      Math.min(scenePanXRef.current, bounds.max),
+    applyCamera(
+      scenePanXRef.current,
+      scenePanYRef.current,
+      cameraScaleRef.current,
+      garden?.plants?.length || 0,
+      false,
     );
-
-    if (clampedX !== scenePanXRef.current) {
-      scenePanXRef.current = clampedX;
-      scenePanX.setValue(clampedX);
-    }
-  }, [garden?.plants?.length, scenePanX]);
+  }, [
+    applyCamera,
+    garden?.plants?.length,
+    gardenAreaLayout.height,
+    gardenAreaLayout.width,
+    sceneContentHeight,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -491,7 +590,7 @@ export default function GardenScreen() {
     return () => clearInterval(interval);
   }, [garden?.plants, selectedPlant]);
 
-  const createPanResponder = (plantId: string) => {
+  const createPanResponder = (plantId: string, plant?: any) => {
     const animatedPos = getAnimatedPlantPosition(plantId);
 
     const responder = PanResponder.create({
@@ -538,11 +637,14 @@ export default function GardenScreen() {
           y: startPos.y + gestureState.dy,
         };
 
-        const maxY = Math.max(0, gardenAreaHeight - PLANT_SIZE);
+        const maxY = Math.max(0, sceneContentHeight - PLANT_SIZE);
         const minY = 0;
         const cameraLeft = Math.max(
           0,
-          Math.min(-scenePanXRef.current, WORLD_WIDTH - gardenAreaLayout.width),
+          Math.min(
+            -scenePanXRef.current / Math.max(cameraScaleRef.current, 0.0001),
+            WORLD_WIDTH - gardenAreaLayout.width,
+          ),
         );
         const xBounds = {
           min: Math.max(0, cameraLeft - 60),
@@ -565,7 +667,11 @@ export default function GardenScreen() {
           [plantId]: newPos,
         };
       },
-      onPanResponderRelease: () => {
+      onPanResponderRelease: (_evt: any, gestureState: any) => {
+        const moved =
+          Math.abs(gestureState?.dx || 0) > 6 ||
+          Math.abs(gestureState?.dy || 0) > 6;
+
         // 放開時只保留預覽位置 (draft)，不要自動儲存為正式位置。
         // 使用者必須按下打勾 (handleLockPlant) 才會真正提交位置。
         try {
@@ -594,6 +700,10 @@ export default function GardenScreen() {
         } catch (e) {
           console.error("拖曳釋放時處理失敗", e);
         } finally {
+          if (!moved && plant && typeof runOpenFocusAnimation === "function") {
+            runOpenFocusAnimation(plant);
+          }
+
           isDraggingPlantRef.current = false;
           activePlantDragIdRef.current = null;
         }
@@ -627,43 +737,83 @@ export default function GardenScreen() {
 
   const scenePanResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_evt, gestureState) => {
+    onMoveShouldSetPanResponder: (evt, gestureState) => {
       if (isDraggingPlantRef.current) return false;
       if (plantFocusVisible) return false;
-      return (
-        Math.abs(gestureState.dx) > 8 &&
-        Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
-      );
+      if (hasUnlockedPlantsRef.current) return false;
+      if ((evt.nativeEvent.touches || []).length >= 2) return true;
+      return Math.abs(gestureState.dx) > 6 || Math.abs(gestureState.dy) > 6;
     },
     onMoveShouldSetPanResponderCapture: () => false,
-    onPanResponderGrant: () => {
+    onPanResponderGrant: (evt) => {
       if (isDraggingPlantRef.current) return;
+      if (hasUnlockedPlantsRef.current) return;
       scenePanStartXRef.current = scenePanXRef.current;
-    },
-    onPanResponderMove: (_evt, gestureState) => {
-      if (isDraggingPlantRef.current) return;
-      const bounds = getCameraBounds(garden?.plants?.length || 0);
-      const nextX = Math.max(
-        bounds.min,
-        Math.min(scenePanStartXRef.current + gestureState.dx, bounds.max),
-      );
+      scenePanStartYRef.current = scenePanYRef.current;
 
-      scenePanXRef.current = nextX;
-      scenePanX.setValue(nextX);
+      const touches = evt.nativeEvent.touches || [];
+      if (touches.length >= 2) {
+        const [a, b] = touches;
+        const distance = Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+        pinchDistanceRef.current = distance;
+        pinchStartScaleRef.current = cameraScaleRef.current;
+      }
+    },
+    onPanResponderMove: (evt, gestureState) => {
+      if (isDraggingPlantRef.current) return;
+      if (hasUnlockedPlantsRef.current) return;
+      const touches = evt.nativeEvent.touches || [];
+      const plantCount = garden?.plants?.length || 0;
+
+      if (touches.length >= 2) {
+        const [a, b] = touches;
+        const distance = Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+
+        if (pinchDistanceRef.current == null) {
+          pinchDistanceRef.current = distance;
+          pinchStartScaleRef.current = cameraScaleRef.current;
+          return;
+        }
+
+        const scaleFactor =
+          distance / Math.max(1, pinchDistanceRef.current || distance);
+        const nextScale = pinchStartScaleRef.current * scaleFactor;
+        applyCamera(
+          scenePanXRef.current,
+          scenePanYRef.current,
+          nextScale,
+          plantCount,
+        );
+        return;
+      }
+
+      pinchDistanceRef.current = null;
+      const nextX = scenePanStartXRef.current + gestureState.dx;
+      const nextY = scenePanStartYRef.current + gestureState.dy;
+      applyCamera(nextX, nextY, cameraScaleRef.current, plantCount, false);
     },
     onPanResponderRelease: () => {
       if (isDraggingPlantRef.current) return;
-      const bounds = getCameraBounds(garden?.plants?.length || 0);
-      const nextX = Math.max(
-        bounds.min,
-        Math.min(scenePanXRef.current, bounds.max),
+      if (hasUnlockedPlantsRef.current) return;
+      pinchDistanceRef.current = null;
+      applyCamera(
+        scenePanXRef.current,
+        scenePanYRef.current,
+        cameraScaleRef.current,
+        garden?.plants?.length || 0,
+        false,
       );
-      scenePanXRef.current = nextX;
-      scenePanX.setValue(nextX);
+    },
+    onPanResponderTerminate: () => {
+      pinchDistanceRef.current = null;
     },
     onPanResponderTerminationRequest: () => true,
     onShouldBlockNativeResponder: () => false,
   });
+
+  const resetCamera = useCallback(() => {
+    applyCamera(-width, 0, 1, garden?.plants?.length || 0, false);
+  }, [applyCamera, garden?.plants?.length]);
 
   const handleLockPlant = async (plantId: string) => {
     if (!garden) return;
@@ -703,6 +853,30 @@ export default function GardenScreen() {
 
     setLockedPlants((prev) => new Set(prev).add(plantId));
   };
+
+  const handleUnlockPlant = useCallback(
+    async (plantId: string) => {
+      if (!garden) return;
+
+      const updatedPlants = (garden.plants || []).map((plant: any) =>
+        plant.id === plantId ? { ...plant, locked: false } : plant,
+      );
+
+      setGarden({ ...garden, plants: updatedPlants });
+      setLockedPlants((prev) => {
+        const next = new Set(prev);
+        next.delete(plantId);
+        return next;
+      });
+
+      await updateGarden({
+        ...garden,
+        plants: updatedPlants,
+        positions: plantPositionsRef.current,
+      });
+    },
+    [garden],
+  );
 
   const useWaterDrop = async () => {
     if (waterDrops <= 0 || !selectedPlant || !garden) {
@@ -844,57 +1018,68 @@ export default function GardenScreen() {
     return timeline;
   };
 
-  const runOpenFocusAnimation = useCallback(
+  const getPlantFocusWorldPoint = useCallback(
     (plant: any) => {
       const pos = draftPlantPositions[plant.id] ||
         plantPositionsRef.current[plant.id] || { x: 0, y: 0 };
-      const sourceCenter = {
-        x: pos.x + scenePanXRef.current + PLANT_SIZE / 2,
-        y: pos.y + PLANT_SIZE / 2,
+      const touchStyle = getLockedTouchStyle(plant);
+      const touchLeft =
+        typeof touchStyle.left === "number" ? touchStyle.left : 0;
+      const touchTop = typeof touchStyle.top === "number" ? touchStyle.top : 0;
+      const touchWidth =
+        typeof touchStyle.width === "number" ? touchStyle.width : PLANT_SIZE;
+      const touchHeight =
+        typeof touchStyle.height === "number" ? touchStyle.height : PLANT_SIZE;
+
+      return {
+        x: pos.x + touchLeft + touchWidth / 2,
+        y: pos.y + touchTop + touchHeight / 2,
+      };
+    },
+    [draftPlantPositions],
+  );
+
+  const focusPlant = useCallback(
+    (plant: any) => {
+      const worldFocus = getPlantFocusWorldPoint(plant);
+      const viewportWidth = Math.max(1, gardenAreaLayout.width || width);
+      const viewportHeight = Math.max(1, gardenAreaLayout.height || height);
+      // 把視窗中心往上偏移（可視化更佳）
+      const viewportCenter = {
+        x: viewportWidth / 2,
+        y: viewportHeight / 2 - FOCUS_SCREEN_OFFSET_Y,
       };
 
-      const zoom = width >= 900 ? 1.85 : 2.1;
-      const targetCenter = {
-        x: width / 2,
-        y: height / 2 - 80,
-      };
+      const scale = cameraScaleRef.current || 1;
 
-      const translateX = targetCenter.x - sourceCenter.x;
-      const translateY = targetCenter.y - sourceCenter.y;
+      // 計算未裁切的目標 scenePan
+      const rawTargetPanX = viewportCenter.x - worldFocus.x * scale;
+      const rawTargetPanY = viewportCenter.y - worldFocus.y * scale;
 
+      // 取得裁切後的最終目標（允許 overflow 以致於可把邊緣植物置中）
+      const clamped = clampCamera(
+        rawTargetPanX,
+        rawTargetPanY,
+        scale,
+        garden?.plants?.length || 0,
+        true,
+      );
+
+      // 設定選擇狀態，但用動畫移動相機（不要立刻跳過去）
       setSelectedPlant(plant);
       setFocusedPost(null);
       setPlantFocusVisible(true);
 
+      // 初始化 overlay/focus card 狀態
       overlayOpacity.setValue(0);
-      zoomTranslateX.setValue(0);
-      zoomTranslateY.setValue(0);
-      zoomScale.setValue(1);
       focusCardOpacity.setValue(0);
       focusCardScale.setValue(0.96);
 
+      // 先啟動 overlay 與 focus card 的動畫（native driver 可用）
       Animated.parallel([
         Animated.timing(overlayOpacity, {
           toValue: 1,
           duration: 220,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(zoomTranslateX, {
-          toValue: translateX,
-          duration: 420,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(zoomTranslateY, {
-          toValue: translateY,
-          duration: 420,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(zoomScale, {
-          toValue: zoom,
-          duration: 420,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -912,23 +1097,301 @@ export default function GardenScreen() {
           useNativeDriver: true,
         }),
       ]).start();
+
+      // 使用 JS-driven requestAnimationFrame 做平滑 pan（避免 native driver 與複合 transform 的問題）
+      panAnimationCancelRef.current = false;
+      const animatePanTo = (toX: number, toY: number, duration = 420) =>
+        new Promise<void>((resolve) => {
+          const startX = scenePanXRef.current;
+          const startY = scenePanYRef.current;
+          const startTime = Date.now();
+          const easingFn = Easing.out(Easing.cubic);
+
+          const step = () => {
+            if (panAnimationCancelRef.current) {
+              resolve();
+              return;
+            }
+            const now = Date.now();
+            const t = Math.min(1, (now - startTime) / duration);
+            const eased = easingFn(t) as number;
+            const nextX = startX + (toX - startX) * eased;
+            const nextY = startY + (toY - startY) * eased;
+            scenePanX.setValue(nextX);
+            scenePanY.setValue(nextY);
+            if (t < 1) {
+              requestAnimationFrame(step);
+            } else {
+              // 確保最終值精準
+              scenePanX.setValue(toX);
+              scenePanY.setValue(toY);
+              resolve();
+            }
+          };
+
+          requestAnimationFrame(step);
+        });
+
+      animatePanTo(clamped.x, clamped.y, 420).then(() => {
+        // 完成後同步 refs
+        scenePanXRef.current = clamped.x;
+        scenePanYRef.current = clamped.y;
+        cameraScaleRef.current = scale;
+
+        // 清除 zoom 補償（保持一致狀態）
+        zoomTranslateX.setValue(0);
+        zoomTranslateY.setValue(0);
+        zoomScale.setValue(1);
+        zoomTranslateXRef.current = 0;
+        zoomTranslateYRef.current = 0;
+        focusZoomScaleRef.current = 1;
+      });
     },
     [
+      clampCamera,
+      garden?.plants?.length,
+      gardenAreaLayout.width,
+      gardenAreaLayout.height,
+      getPlantFocusWorldPoint,
+      overlayOpacity,
       focusCardOpacity,
       focusCardScale,
-      draftPlantPositions,
-      overlayOpacity,
+      zoomTranslateX,
+      zoomTranslateY,
       zoomScale,
+      applyCamera,
+    ],
+  );
+
+  const measurePlantCenterOnScreen = useCallback((plantId: string) => {
+    return new Promise<{ x: number; y: number } | null>((resolve) => {
+      const targetRef = plantTouchRefs.current[plantId];
+      if (!targetRef || typeof targetRef.measureInWindow !== "function") {
+        resolve(null);
+        return;
+      }
+
+      targetRef.measureInWindow(
+        (x: number, y: number, w: number, h: number) => {
+          if (
+            ![x, y, w, h].every((v) => Number.isFinite(v)) ||
+            w <= 0 ||
+            h <= 0
+          ) {
+            resolve(null);
+            return;
+          }
+
+          resolve({
+            x: x + w / 2,
+            y: y + h / 2,
+          });
+        },
+      );
+    });
+  }, []);
+
+  const measureViewportCenterOnScreen = useCallback(() => {
+    return new Promise<{ x: number; y: number }>((resolve) => {
+      const viewportNode = sceneViewportRef.current;
+      if (!viewportNode || typeof viewportNode.measureInWindow !== "function") {
+        resolve({
+          x: Math.max(1, gardenAreaLayout.width || width) / 2,
+          y: Math.max(1, gardenAreaLayout.height || height) / 2,
+        });
+        return;
+      }
+
+      viewportNode.measureInWindow(
+        (x: number, y: number, w: number, h: number) => {
+          if (
+            ![x, y, w, h].every((v) => Number.isFinite(v)) ||
+            w <= 0 ||
+            h <= 0
+          ) {
+            resolve({
+              x: Math.max(1, gardenAreaLayout.width || width) / 2,
+              y: Math.max(1, gardenAreaLayout.height || height) / 2,
+            });
+            return;
+          }
+
+          resolve({ x: x + w / 2, y: y + h / 2 });
+        },
+      );
+    });
+  }, [gardenAreaLayout.width, gardenAreaLayout.height]);
+
+  const trackPlantToViewportCenter = useCallback(
+    async (plantId: string, maxSteps = 8) => {
+      for (let i = 0; i < maxSteps; i += 1) {
+        const measuredCenter = await measurePlantCenterOnScreen(plantId);
+        if (!measuredCenter) return;
+
+        const viewportCenter = await measureViewportCenterOnScreen();
+        const errorX = viewportCenter.x - measuredCenter.x;
+        const errorY = viewportCenter.y - measuredCenter.y;
+
+        if (Math.abs(errorX) <= 1 && Math.abs(errorY) <= 1) {
+          return;
+        }
+
+        const totalScale = Math.max(
+          0.0001,
+          cameraScaleRef.current * focusZoomScaleRef.current,
+        );
+
+        const correctedX = zoomTranslateXRef.current + errorX / totalScale;
+        const correctedY = zoomTranslateYRef.current + errorY / totalScale;
+
+        zoomTranslateXRef.current = correctedX;
+        zoomTranslateYRef.current = correctedY;
+        zoomTranslateX.setValue(correctedX);
+        zoomTranslateY.setValue(correctedY);
+
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+      }
+    },
+    [
+      measurePlantCenterOnScreen,
+      measureViewportCenterOnScreen,
       zoomTranslateX,
       zoomTranslateY,
     ],
   );
 
+  const runOpenFocusAnimation = useCallback(
+    (plant: any) => {
+      // 先將場景置中到植物位置（不縮放），再執行放大動畫
+      const zoom = width >= 900 ? 1.85 : 2.1;
+      const viewportWidth = Math.max(1, gardenAreaLayout.width || width);
+      const viewportHeight = Math.max(1, gardenAreaLayout.height || height);
+      const worldFocus = getPlantFocusWorldPoint(plant);
+      const currentScale = cameraScaleRef.current;
+
+      // 計算將 worldFocus 移到 viewport 中心時的 scenePan
+      const viewportCenter = { x: viewportWidth / 2, y: viewportHeight / 2 };
+      const targetPanX = viewportCenter.x - worldFocus.x * currentScale;
+      const targetPanY = viewportCenter.y - worldFocus.y * currentScale;
+
+      // 先直接套用 camera（置中）以避免動畫起始時座標錯位
+      applyCamera(
+        targetPanX,
+        targetPanY,
+        currentScale,
+        garden?.plants?.length || 0,
+        true,
+      );
+
+      // 要放大的最終 scale 與對應的 scenePan（直接計算）
+      const finalScale = currentScale * zoom;
+      const targetPanXForFinal = viewportCenter.x - worldFocus.x * finalScale;
+      const targetPanYForFinal = viewportCenter.y - worldFocus.y * finalScale;
+
+      setSelectedPlant(plant);
+      setFocusedPost(null);
+      setPlantFocusVisible(true);
+
+      overlayOpacity.setValue(0);
+      focusCardOpacity.setValue(0);
+      focusCardScale.setValue(0.96);
+
+      // 同時動畫 cameraScale 與 scenePan 到最終值，避免用 zoomTranslate 做補償
+      Animated.parallel([
+        Animated.timing(overlayOpacity, {
+          toValue: 1,
+          duration: 220,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(cameraScale, {
+          toValue: finalScale,
+          duration: 420,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scenePanX, {
+          toValue: targetPanXForFinal,
+          duration: 420,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scenePanY, {
+          toValue: targetPanYForFinal,
+          duration: 420,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(focusCardOpacity, {
+          toValue: 1,
+          duration: 260,
+          delay: 160,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.spring(focusCardScale, {
+          toValue: 1,
+          friction: 9,
+          tension: 70,
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (!finished) return;
+
+        // 同步 refs
+        scenePanXRef.current = targetPanXForFinal;
+        scenePanYRef.current = targetPanYForFinal;
+        cameraScaleRef.current = finalScale;
+
+        trackPlantToViewportCenter(plant.id);
+      });
+    },
+    [
+      focusCardOpacity,
+      focusCardScale,
+      gardenAreaLayout.height,
+      gardenAreaLayout.width,
+      getPlantFocusWorldPoint,
+      overlayOpacity,
+      sceneContentHeight,
+      trackPlantToViewportCenter,
+      zoomScale,
+      zoomTranslateX,
+      zoomTranslateY,
+      applyCamera,
+    ],
+  );
+
   const closeFocusPanel = useCallback(() => {
+    const pre = preFocusCameraRef.current;
+    const target = pre
+      ? { x: pre.x, y: pre.y, scale: pre.scale }
+      : { x: -width, y: 0, scale: 1 };
+
     Animated.parallel([
       Animated.timing(overlayOpacity, {
         toValue: 0,
         duration: 180,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(cameraScale, {
+        toValue: target.scale,
+        duration: 300,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(scenePanX, {
+        toValue: target.x,
+        duration: 300,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(scenePanY, {
+        toValue: target.y,
+        duration: 300,
         easing: Easing.in(Easing.cubic),
         useNativeDriver: true,
       }),
@@ -963,9 +1426,17 @@ export default function GardenScreen() {
         useNativeDriver: true,
       }),
     ]).start(() => {
+      // 同步 refs
+      scenePanXRef.current = target.x;
+      scenePanYRef.current = target.y;
+      cameraScaleRef.current = target.scale;
+
       setPlantFocusVisible(false);
       setSelectedPlant(null);
       setFocusedPost(null);
+
+      // 清掉 pre-focus 狀態
+      preFocusCameraRef.current = null;
     });
   }, [
     focusCardOpacity,
@@ -974,6 +1445,9 @@ export default function GardenScreen() {
     zoomScale,
     zoomTranslateX,
     zoomTranslateY,
+    cameraScale,
+    scenePanX,
+    scenePanY,
   ]);
 
   const resetGardenViewInstant = useCallback(() => {
@@ -981,15 +1455,18 @@ export default function GardenScreen() {
     zoomTranslateX.setValue(0);
     zoomTranslateY.setValue(0);
     zoomScale.setValue(1);
+    zoomTranslateXRef.current = 0;
+    zoomTranslateYRef.current = 0;
+    focusZoomScaleRef.current = 1;
     focusCardOpacity.setValue(0);
     focusCardScale.setValue(0.96);
-    scenePanXRef.current = -width;
-    scenePanX.setValue(-width);
+    applyCamera(-width, 0, 1, garden?.plants?.length || 0, false);
   }, [
+    applyCamera,
+    garden?.plants?.length,
     focusCardOpacity,
     focusCardScale,
     overlayOpacity,
-    scenePanX,
     zoomScale,
     zoomTranslateX,
     zoomTranslateY,
@@ -1105,9 +1582,9 @@ export default function GardenScreen() {
       </View>
 
       <View
+        ref={sceneViewportRef}
         style={styles.sceneViewport}
         onLayout={(event) => {
-          setGardenAreaHeight(event.nativeEvent.layout.height);
           setGardenAreaLayout(event.nativeEvent.layout);
         }}
         {...scenePanResponder.panHandlers}
@@ -1117,12 +1594,30 @@ export default function GardenScreen() {
             styles.sceneWorld,
             {
               width: WORLD_WIDTH,
+              height: sceneContentHeight,
               transform: [
                 {
-                  translateX: Animated.add(scenePanX, zoomTranslateX),
+                  translateX: Animated.add(
+                    Animated.add(scenePanX, zoomTranslateX),
+                    Animated.multiply(
+                      Animated.subtract(cameraScale, 1),
+                      WORLD_WIDTH / 2,
+                    ),
+                  ),
                 },
-                { translateY: zoomTranslateY },
-                { scale: zoomScale },
+                {
+                  translateY: Animated.add(
+                    scenePanY,
+                    Animated.add(
+                      zoomTranslateY,
+                      Animated.multiply(
+                        Animated.subtract(cameraScale, 1),
+                        sceneContentHeight / 2,
+                      ),
+                    ),
+                  ),
+                },
+                { scale: Animated.multiply(cameraScale, zoomScale) },
               ],
             },
           ]}
@@ -1133,7 +1628,7 @@ export default function GardenScreen() {
               styles.sceneBackground,
               {
                 width: WORLD_WIDTH,
-                height: Math.min(BACKGROUND_HEIGHT, gardenAreaHeight),
+                height: sceneContentHeight,
               },
             ]}
             resizeMode="cover"
@@ -1141,17 +1636,25 @@ export default function GardenScreen() {
 
           <View style={styles.zoneHintLayer} pointerEvents="none">
             {getUnlockedZoneCount(sortedPlants.length) < 2 && (
-              <View style={[styles.lockedZoneOverlay, { left: 0, width }]}>
+              <View
+                style={[
+                  styles.lockedZoneOverlay,
+                  { left: 0, width, height: sceneContentHeight },
+                ]}
+              >
                 <Text style={styles.lockedZoneText}>左側花園鎖定</Text>
-                <Text style={styles.lockedZoneSubText}>種滿 50 朵花解鎖</Text>
+                <Text style={styles.lockedZoneSubText}>種滿 20 朵花解鎖</Text>
               </View>
             )}
             {getUnlockedZoneCount(sortedPlants.length) < 3 && (
               <View
-                style={[styles.lockedZoneOverlay, { left: width * 2, width }]}
+                style={[
+                  styles.lockedZoneOverlay,
+                  { left: width * 2, width, height: sceneContentHeight },
+                ]}
               >
                 <Text style={styles.lockedZoneText}>右側花園鎖定</Text>
-                <Text style={styles.lockedZoneSubText}>再種滿 50 朵花解鎖</Text>
+                <Text style={styles.lockedZoneSubText}>種滿 40 朵花解鎖</Text>
               </View>
             )}
           </View>
@@ -1168,7 +1671,10 @@ export default function GardenScreen() {
 
           {sortedPlants.length > 0 && (
             <View
-              style={[styles.gardenArea, { width: WORLD_WIDTH }]}
+              style={[
+                styles.gardenArea,
+                { width: WORLD_WIDTH, height: sceneContentHeight },
+              ]}
               pointerEvents={plantFocusVisible ? "none" : "auto"}
             >
               {sortedPlants.map((plant, index) => {
@@ -1184,7 +1690,7 @@ export default function GardenScreen() {
                   isDraggingPlantRef.current &&
                   activePlantDragIdRef.current === plant.id;
                 const pos = previewPos;
-                const panResponder = createPanResponder(plant.id);
+                const panResponder = createPanResponder(plant.id, plant);
                 const isLocked = lockedPlants.has(plant.id);
                 const dragTransform = isLocked
                   ? []
@@ -1218,6 +1724,9 @@ export default function GardenScreen() {
                     </View>
 
                     <TouchableOpacity
+                      ref={(node) => {
+                        plantTouchRefs.current[plant.id] = node;
+                      }}
                       style={[
                         styles.touchArea,
                         getLockedTouchStyle(plant),
@@ -1227,13 +1736,6 @@ export default function GardenScreen() {
                           elevation:
                             Math.round(pos.y) + (isActiveDrag ? 10000 : 0) + 2,
                         },
-                        SHOW_TOUCH_DEBUG && isActiveDrag
-                          ? {
-                              backgroundColor: "rgba(255,0,0,0.12)",
-                              borderWidth: 1,
-                              borderColor: "rgba(255,0,0,0.22)",
-                            }
-                          : {},
                       ]}
                       activeOpacity={0.9}
                       onPress={() => runOpenFocusAnimation(plant)}
@@ -1270,20 +1772,13 @@ export default function GardenScreen() {
                     <View
                       style={[
                         styles.dragTouchArea,
-                        getDragTouchStyle(plant),
+                        getLockedTouchStyle(plant),
                         {
                           zIndex:
                             Math.round(pos.y) + (isActiveDrag ? 10000 : 0) + 2,
                           elevation:
                             Math.round(pos.y) + (isActiveDrag ? 10000 : 0) + 2,
                         },
-                        SHOW_TOUCH_DEBUG && isActiveDrag
-                          ? {
-                              backgroundColor: "rgba(0,0,255,0.08)",
-                              borderWidth: 1,
-                              borderColor: "rgba(0,0,255,0.12)",
-                            }
-                          : {},
                       ]}
                       {...(panResponder.panHandlers as any)}
                     />
@@ -1305,6 +1800,20 @@ export default function GardenScreen() {
             </View>
           )}
         </Animated.View>
+      </View>
+
+      <View style={styles.cameraControls} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.cameraControlButton}
+          onPress={resetCamera}
+          activeOpacity={0.8}
+        >
+          <MaterialCommunityIcons
+            name="crosshairs-gps"
+            size={18}
+            color="#1B5E20"
+          />
+        </TouchableOpacity>
       </View>
 
       {plantFocusVisible && selectedPlant && (
@@ -1436,14 +1945,11 @@ export default function GardenScreen() {
                 <View style={styles.actionRowInFocus}>
                   <TouchableOpacity
                     style={styles.moveButton}
-                    onPress={() => {
+                    onPress={async () => {
                       if (!selectedPlant) return;
-                      setLockedPlants((prev) => {
-                        const s = new Set(prev);
-                        s.delete(selectedPlant.id);
-                        return s;
-                      });
+                      const movePlantId = selectedPlant.id;
                       closeFocusPanel();
+                      await handleUnlockPlant(movePlantId);
                     }}
                   >
                     <Text style={styles.moveButtonText}>移動植物</Text>
@@ -1532,19 +2038,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F5F5",
   },
   sceneViewport: {
-    flex: 1,
-    position: "relative",
-    overflow: "hidden",
-  },
-  sceneWorld: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    height: "100%",
-  },
-  sceneBackground: {
-    position: "absolute",
-    top: 0,
     left: 0,
     height: "100%",
   },
@@ -1611,6 +2104,17 @@ const styles = StyleSheet.create({
     position: "relative",
     height: "100%",
   },
+  sceneWorld: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+  },
+  sceneBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    height: "100%",
+  },
   plantContainer: {
     position: "absolute",
     width: PLANT_SIZE,
@@ -1629,11 +2133,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   dragTouchArea: {
-    width: PLANT_SIZE,
-    height: PLANT_SIZE,
-    left: 0,
-    top: 0,
-    borderRadius: PLANT_SIZE / 2,
+    position: "absolute",
+    width: 25,
+    height: 30,
+    left: (PLANT_SIZE - 25) / 2,
+    top: (PLANT_SIZE - 30) / 2 + 30,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    borderRadius: 8,
   },
   draggablePlant: {
     width: PLANT_SIZE,
@@ -1665,7 +2174,6 @@ const styles = StyleSheet.create({
   lockedZoneOverlay: {
     position: "absolute",
     top: 0,
-    bottom: 0,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(23, 53, 32, 0.18)",
@@ -1715,7 +2223,7 @@ const styles = StyleSheet.create({
   focusCard: {
     width: "100%",
     maxWidth: 760,
-    maxHeight: "40%",
+    maxHeight: "30%",
     backgroundColor: "rgba(246, 251, 245, 0.97)",
     borderRadius: 24,
     overflow: "hidden",
@@ -1758,7 +2266,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   focusScroll: {
-    maxHeight: 280,
+    maxHeight: 220,
   },
   focusDetailContent: {
     padding: 18,
@@ -1888,5 +2396,27 @@ const styles = StyleSheet.create({
   debugText: {
     color: "#fff",
     fontSize: 11,
+  },
+  cameraControls: {
+    position: "absolute",
+    right: 12,
+    bottom: 18,
+    zIndex: 1600,
+    elevation: 1600,
+    gap: 10,
+  },
+  cameraControlButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(27,94,32,0.25)",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
   },
 });

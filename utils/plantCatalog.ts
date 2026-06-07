@@ -101,15 +101,12 @@ export const ASSET_MAP: Record<string, any[]> = {
 // 這些分類會自動生成植物，且從對應兩個變體隨機選 1 個
 export const TAG_TO_VARIANTS: Record<string, string[]> = {
   運動: ["sport1", "sport2"],
-  心情: ["mood1", "mood2"],
   人際: ["love1", "love2"],
   飲食: ["eat1", "eat2"],
   娛樂: ["entertainment1", "entertainment2"],
-  "學業/工作": ["mood1", "mood2"],
+  "學業/工作": ["mood2", "mood2"],
   寵物: ["pet1", "pet2"],
-  金錢: ["sport1", "sport2"],
-  自我成長: ["love1", "love2"],
-  其他: ["eat1", "eat2"],
+  其他: ["mood1", "mood1"],
 };
 
 const getRandomIndex = (length: number): number => {
