@@ -367,7 +367,7 @@ export default function NotificationPage() {
                         numberOfLines={1}
                         ellipsizeMode="tail"
                       >
-                        {item.comment.text || "貼文有新的留言"}
+                        {item.comment.text || "(圖片)"}
                       </Text>
 
                       <Text style={styles.timeText}>

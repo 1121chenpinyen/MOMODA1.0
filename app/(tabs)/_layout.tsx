@@ -31,7 +31,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: "首頁",
           tabBarIcon: ({ focused }) => (
             // --- 修改這裡的 View 樣式 ---
             <View
@@ -71,19 +71,19 @@ export default function TabLayout() {
       <Tabs.Screen
         name="garden"
         options={{
-          title: "Garden",
+          title: "花園",
           tabBarIcon: ({ focused }) => (
             // --- 修改這裡的 View 樣式 ---
             <View
               style={{
-                width: 60, // 設定適合的大小
+                width: 180, // 設定適合的大小
                 height: 28,
                 overflow: "hidden", // 確保圖片不超出
                 opacity: focused ? 1 : 0.6,
               }}
             >
               <Image
-                source={peticon}
+                source={require("../../assets/gardenicon.png")}
                 style={{
                   width: "100%",
                   height: "100%",
@@ -109,9 +109,48 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="notification"
+        options={{
+          title: "通知",
+          tabBarIcon: ({ focused }) => (
+            <View
+              style={{
+                width: 180,
+                height: 42,
+                overflow: "hidden",
+                opacity: focused ? 1 : 0.6,
+              }}
+            >
+              <Image
+                source={require("../../assets/notificationicon.png")}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                }}
+                resizeMode="cover"
+              />
+            </View>
+          ),
+          headerRight: () => (
+            <Link href="/modal" asChild>
+              <Pressable>
+                {({ pressed }) => (
+                  <FontAwesome
+                    name="info-circle"
+                    size={25}
+                    color={Colors[colorScheme ?? "light"].text}
+                    style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
+                  />
+                )}
+              </Pressable>
+            </Link>
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
+          title: "個人頁",
           tabBarIcon: ({ focused }) => (
             // --- 修改這裡的 View 樣式 ---
             <View
@@ -148,45 +187,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="notification"
-        options={{
-          title: "通知",
-          tabBarIcon: ({ focused }) => (
-            <View
-              style={{
-                width: 60,
-                height: 28,
-                overflow: "hidden",
-                opacity: focused ? 1 : 0.6,
-              }}
-            >
-              <Image
-                source={require("../../assets/notificationicon.png")}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                }}
-                resizeMode="cover"
-              />
-            </View>
-          ),
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable>
-                {({ pressed }) => (
-                  <FontAwesome
-                    name="info-circle"
-                    size={25}
-                    color={Colors[colorScheme ?? "light"].text}
-                    style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
-          ),
-        }}
-      />
+      
     </Tabs>
   );
 }

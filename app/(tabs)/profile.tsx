@@ -3,41 +3,41 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import {
-    arrayUnion,
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    increment,
-    query,
-    setDoc,
-    updateDoc,
-    where
+  arrayUnion,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  increment,
+  query,
+  setDoc,
+  updateDoc,
+  where
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Dimensions,
-    Image,
-    Keyboard,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  Image,
+  Keyboard,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import PostDetailModal from "../../components/PostDetailModal";
 import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
 import {
-    getGarden,
-    getGlobalData,
-    growPlant,
-    updateGlobalData
+  getGarden,
+  getGlobalData,
+  growPlant,
+  updateGlobalData
 } from "../../utils/storage";
 
 const { width } = Dimensions.get("window");
@@ -57,6 +57,7 @@ export default function ProfilePage() {
   const [favoritePosts, setFavoritePosts] = useState<any[]>([]);
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedPostDetail, setSelectedPostDetail] = useState<any | null>(null);
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<string | null>(null);
   const [profileMap, setProfileMap] = useState<Record<string, any>>({});
   
   // 留言相關狀態
@@ -477,6 +478,13 @@ export default function ProfilePage() {
     return new Date(createdAt);
   };
 
+  const getPostThumbnailUrl = (post: any) => {
+    if (post.imageUri) return post.imageUri;
+    if (post.media?.type === "photo" || post.media?.type === "image") return post.media.url;
+    if (post.thumbnailUrl) return post.thumbnailUrl;
+    return null;
+  };
+
   const getPostDaysFromPosts = (posts: any[]) => {
     const days: Record<string, boolean> = {};
     posts.forEach((post) => {
@@ -513,6 +521,23 @@ export default function ProfilePage() {
 
     return matrix;
   };
+
+  const selectedCalendarDayPosts = useMemo(() => {
+    if (!selectedCalendarDay) return [];
+    return myPosts
+      .filter((post) => {
+        const createdAt = parsePostDate(post.createdAt);
+        return (
+          createdAt &&
+          formatDayKey(createdAt) === selectedCalendarDay
+        );
+      })
+      .sort((a, b) => {
+        const aDate = parsePostDate(a.createdAt) || new Date(0);
+        const bDate = parsePostDate(b.createdAt) || new Date(0);
+        return aDate.getTime() - bDate.getTime();
+      });
+  }, [selectedCalendarDay, myPosts]);
 
   useFocusEffect(
     useCallback(() => {
@@ -900,18 +925,51 @@ export default function ProfilePage() {
                             setDetailVisible(true);
                           }}
                         >
-                          <Text style={styles.postRowDate}>
-                            {parsePostDate(post.createdAt)
-                              ? parsePostDate(post.createdAt).toLocaleDateString("zh-TW", {
-                                  year: "numeric",
-                                  month: "2-digit",
-                                  day: "2-digit",
-                                })
-                              : "未知時間"}
-                          </Text>
-                          <Text style={styles.postRowContent} numberOfLines={2}>
-                            {post.content || post.text || "(無內容)"}
-                          </Text>
+                          <View style={styles.postRowHeader}>
+                            <Image
+                              source={
+                                post.authorAvatar
+                                  ? { uri: post.authorAvatar }
+                                  : require("../../assets/avatar-placeholder.png")
+                              }
+                              style={styles.postRowAvatar}
+                            />
+                            <View style={styles.postRowAuthorInfo}>
+                              <Text style={styles.postRowName} numberOfLines={1}>
+                                {profileMap[post.authorId || post.deviceId]?.name ||
+                                  post.authorName ||
+                                  post.userId ||
+                                  userId}
+                              </Text>
+                              <View style={styles.postRowMetaRow}>
+                                <Text style={styles.postRowDate}>
+                                  {parsePostDate(post.createdAt)
+                                    ? parsePostDate(post.createdAt).toLocaleDateString("zh-TW", {
+                                        year: "numeric",
+                                        month: "2-digit",
+                                        day: "2-digit",
+                                      })
+                                    : "未知時間"}
+                                </Text>
+                                {((post.tags && post.tags.length > 0) || post.tag) ? (
+                                  <Text style={styles.postRowTag} numberOfLines={1}>
+                                    #{post.tags?.[0] || post.tag}
+                                  </Text>
+                                ) : null}
+                              </View>
+                            </View>
+                          </View>
+                          <View style={styles.postRowContentRow}>
+                            <Text style={[styles.postRowContent, styles.postRowContentWithImage]} numberOfLines={1}>
+                              {post.content || post.text || "(無內容)"}
+                            </Text>
+                            {getPostThumbnailUrl(post) ? (
+                              <Image
+                                source={{ uri: getPostThumbnailUrl(post) }}
+                                style={styles.postRowThumbnail}
+                              />
+                            ) : null}
+                          </View>
                         </TouchableOpacity>
                       ))
                   )}
@@ -939,18 +997,51 @@ export default function ProfilePage() {
                       setDetailVisible(true);
                     }}
                   >
-                    <Text style={styles.postRowDate}>
-                      {parsePostDate(post.createdAt)
-                        ? parsePostDate(post.createdAt).toLocaleDateString("zh-TW", {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                          })
-                        : "未知時間"}
-                    </Text>
-                    <Text style={styles.postRowContent} numberOfLines={2}>
-                      {post.content || post.text || "(無內容)"}
-                    </Text>
+                    <View style={styles.postRowHeader}>
+                      <Image
+                        source={
+                          post.authorAvatar
+                            ? { uri: post.authorAvatar }
+                            : require("../../assets/avatar-placeholder.png")
+                        }
+                        style={styles.postRowAvatar}
+                      />
+                      <View style={styles.postRowAuthorInfo}>
+                        <Text style={styles.postRowName} numberOfLines={1}>
+                          {profileMap[post.authorId || post.deviceId]?.name ||
+                            post.authorName ||
+                            post.userId ||
+                            userId}
+                        </Text>
+                        <View style={styles.postRowMetaRow}>
+                          <Text style={styles.postRowDate}>
+                            {parsePostDate(post.createdAt)
+                              ? parsePostDate(post.createdAt).toLocaleDateString("zh-TW", {
+                                  year: "numeric",
+                                  month: "2-digit",
+                                  day: "2-digit",
+                                })
+                              : "未知時間"}
+                          </Text>
+                          {((post.tags && post.tags.length > 0) || post.tag) ? (
+                            <Text style={styles.postRowTag} numberOfLines={1}>
+                              #{post.tags?.[0] || post.tag}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.postRowContentRow}>
+                      <Text style={[styles.postRowContent, styles.postRowContentWithImage]} numberOfLines={1}>
+                        {post.content || post.text || "(無內容)"}
+                      </Text>
+                      {getPostThumbnailUrl(post) ? (
+                        <Image
+                          source={{ uri: getPostThumbnailUrl(post) }}
+                          style={styles.postRowThumbnail}
+                        />
+                      ) : null}
+                    </View>
                   </TouchableOpacity>
                 ))
             )}
@@ -961,11 +1052,12 @@ export default function ProfilePage() {
           <View style={styles.calendarCard}>
           <View style={styles.calendarHeader}>
             <TouchableOpacity
-              onPress={() =>
+              onPress={() => {
                 setCalendarMonth(
                   (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1),
-                )
-              }
+                );
+                setSelectedCalendarDay(null);
+              }}
             >
               <MaterialIcons name="chevron-left" size={24} color="#333" />
             </TouchableOpacity>
@@ -976,11 +1068,12 @@ export default function ProfilePage() {
               })}
             </Text>
             <TouchableOpacity
-              onPress={() =>
+              onPress={() => {
                 setCalendarMonth(
                   (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1),
-                )
-              }
+                );
+                setSelectedCalendarDay(null);
+              }}
             >
               <MaterialIcons name="chevron-right" size={24} color="#333" />
             </TouchableOpacity>
@@ -1011,21 +1104,43 @@ export default function ProfilePage() {
                   day === new Date().getDate() &&
                   calendarMonth.getMonth() === new Date().getMonth() &&
                   calendarMonth.getFullYear() === new Date().getFullYear();
+                const isSelected = hasPost && dayKey === selectedCalendarDay;
 
                 return (
                   <View key={`day-${dayIndex}`} style={styles.dayCell}>
                     {day ? (
-                      <View style={styles.dayInner}>
-                        <Text style={[styles.dayText, today && styles.todayDayText]}>
-                          {day}
-                        </Text>
+                      <TouchableOpacity
+                        style={styles.dayInner}
+                        disabled={!hasPost}
+                        onPress={() => {
+                          if (!hasPost) return;
+                          setSelectedCalendarDay(dayKey);
+                        }}
+                      >
                         {hasPost ? (
                           <Image
-                            source={require("../../assets/plant/mood1/mood1-5.png")}
+                            source={require("../../assets/day flower.png")}
                             style={styles.moodIcon}
                           />
                         ) : null}
-                      </View>
+
+                        <View
+                          style={[
+                            styles.dayTextWrapper,
+                            isSelected && styles.selectedDayWrapper,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.dayText,
+                              today && styles.todayDayText,
+                              hasPost && styles.dayTextWithPost,
+                            ]}
+                          >
+                            {day}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
                     ) : (
                       <View style={styles.emptyDay} />
                     )}
@@ -1034,6 +1149,76 @@ export default function ProfilePage() {
               })}
             </View>
           ))}
+
+          {selectedCalendarDay ? (
+            <View style={styles.selectedDayPosts}>
+              <Text style={styles.selectedDayPostsTitle}>
+                {new Date(selectedCalendarDay).toLocaleDateString("zh-TW", {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                })} 的貼文
+              </Text>
+
+              {selectedCalendarDayPosts.length === 0 ? (
+                <Text style={styles.emptyText}>該日尚無貼文</Text>
+              ) : (
+                selectedCalendarDayPosts.map((post) => (
+                  <TouchableOpacity
+                    key={post.id}
+                    style={styles.calendarPostRow}
+                    onPress={() => {
+                      setSelectedPostDetail(post);
+                      setDetailVisible(true);
+                    }}
+                  >
+                    <View style={styles.calendarPostLeft}>
+                      <Image
+                        source={
+                          post.authorAvatar
+                            ? { uri: post.authorAvatar }
+                            : require("../../assets/avatar-placeholder.png")
+                        }
+                        style={styles.calendarPostAvatar}
+                      />
+                    </View>
+
+                    <View style={styles.calendarPostContent}>
+                      <View style={styles.calendarPostHeader}>
+                        <Text style={styles.calendarPostUserName} numberOfLines={1}>
+                          {post.authorName || post.userId || userId}
+                        </Text>
+                        <Text style={styles.calendarPostDate}>
+                          {parsePostDate(post.createdAt)
+                            ? parsePostDate(post.createdAt).toLocaleTimeString("zh-TW", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "未知時間"}
+                        </Text>
+                      </View>
+
+                      {((post.tags && post.tags.length > 0) || post.tag) ? (
+                        <Text style={styles.calendarPostTag} numberOfLines={1}>
+                          #{post.tags?.[0] || post.tag}
+                        </Text>
+                      ) : null}
+
+                      <Text style={[styles.calendarPostText, styles.calendarPostTextWithImage]} numberOfLines={1}>
+                        {post.content || post.text || "(無內容)"}
+                      </Text>
+                    </View>
+                    {getPostThumbnailUrl(post) ? (
+                      <Image
+                        source={{ uri: getPostThumbnailUrl(post) }}
+                        style={styles.calendarPostThumbnail}
+                      />
+                    ) : null}
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+          ) : null}
         </View>
         ) : null}
       </View>
@@ -1203,15 +1388,58 @@ const styles = StyleSheet.create({
     borderBottomColor: "#eee",
     paddingVertical: 12,
   },
+  postRowHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  postRowAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+    backgroundColor: "#ddd",
+  },
+  postRowAuthorInfo: {
+    flex: 1,
+  },
+  postRowName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 4,
+  },
+  postRowMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
   postRowDate: {
     fontSize: 12,
     color: "#999",
-    marginBottom: 6,
+  },
+  postRowTag: {
+    fontSize: 12,
+    color: "#6f5b00",
+    marginLeft: 10,
+  },
+  postRowContentRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   postRowContent: {
     fontSize: 15,
     color: "#333",
     lineHeight: 20,
+    flex: 1,
+  },
+  postRowContentWithImage: {
+    marginRight: 10,
+  },
+  postRowThumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: 10,
   },
   emptyText: {
     fontSize: 14,
@@ -1221,7 +1449,7 @@ const styles = StyleSheet.create({
   },
   calendarCard: {
     width: "100%",
-    backgroundColor: "#fff",
+    backgroundColor: "#F0F4EC",
     borderRadius: 20,
     padding: 16,
     marginBottom: 20,
@@ -1262,29 +1490,124 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     width: (width - 50) / 7,
-    minHeight: 50,
+    height: 50,
     alignItems: "center",
+    justifyContent: "center",
   },
+
   dayInner: {
+    width: 42,
+    height: 42,
     alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
   },
+
+  dayTextWrapper: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 15,
+  },
+
+  selectedDayWrapper: {
+    backgroundColor: "rgba(123, 112, 201, 0.15)",
+  },
+
   dayText: {
     fontSize: 14,
     color: "#333",
-    marginBottom: 6,
+    zIndex: 2,
   },
+
+  dayTextWithPost: {
+    fontWeight: "700",
+    color: "#6f5b00",
+  },
+
   todayDayText: {
     color: "#7b70c9",
     fontWeight: "700",
   },
+
   emptyDay: {
     width: (width - 50) / 7,
-    height: 30,
+    height: 50,
   },
+
   moodIcon: {
-    width: 24,
-    height: 24,
+    position: "absolute",
+    width: 38,
+    height: 38,
+    zIndex: 1,
+    resizeMode: "contain",
+  },
+  selectedDayPosts: {
+    marginTop: 12,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 12,
+  },
+  selectedDayPostsTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 10,
+  },
+  calendarPostRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  calendarPostLeft: {
+    marginRight: 10,
+  },
+  calendarPostAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#ddd",
+  },
+  calendarPostContent: {
+    flex: 1,
+  },
+  calendarPostHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  calendarPostUserName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+    flex: 1,
+  },
+  calendarPostDate: {
+    fontSize: 12,
+    color: "#999",
+    marginLeft: 8,
+  },
+  calendarPostTag: {
+    fontSize: 12,
+    color: "#6f5b00",
+    marginBottom: 4,
+  },
+  calendarPostText: {
+    fontSize: 14,
+    color: "#444",
+  },
+  calendarPostTextWithImage: {
+    marginRight: 10,
+  },
+  calendarPostThumbnail: {
+    width: 64,
+    height: 64,
     borderRadius: 12,
+    marginLeft: 10,
+    backgroundColor: "#ddd",
   },
   statValue: { fontSize: 32, color: "#d1a07a", fontWeight: "300" },
   commentInputBar: {
