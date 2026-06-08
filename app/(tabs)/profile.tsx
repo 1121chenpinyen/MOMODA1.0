@@ -72,6 +72,12 @@ export default function ProfilePage() {
 
   const [activeSection, setActiveSection] =
     useState<"posts" | "favorites">("posts");
+  // 貼文頁／收藏頁底線滑動動畫
+  const [sectionTabsWidth, setSectionTabsWidth] =
+    useState(0);
+
+  const sectionUnderlineAnim =
+    useRef(new Animated.Value(0)).current;
 
   const [postViewMode, setPostViewMode] =
     useState<"time" | "calendar">("time");
@@ -134,7 +140,15 @@ export default function ProfilePage() {
   useEffect(() => {
     getDeviceId().then(setDeviceId);
   }, []);
-
+  useEffect(() => {
+    Animated.spring(sectionUnderlineAnim, {
+      toValue: activeSection === "posts" ? 0 : 1,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 180,
+      mass: 0.8,
+    }).start();
+  }, [activeSection, sectionUnderlineAnim]);
   /*
     更新 profileMap：
     顯示收藏頁中其他使用者的名稱與頭像。
@@ -1295,6 +1309,12 @@ export default function ProfilePage() {
     setDetailVisible(true);
   };
 
+  const sectionUnderlineTranslateX =
+    sectionUnderlineAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, sectionTabsWidth / 2],
+    });
+
   if (loading) {
     return (
       <View style={styles.loading}>
@@ -1461,13 +1481,17 @@ export default function ProfilePage() {
         </View>
 
         {/* 貼文頁與收藏頁 */}
-        <View style={styles.sectionTabs}>
+        <View
+          style={styles.sectionTabs}
+          onLayout={(event) => {
+            setSectionTabsWidth(
+              event.nativeEvent.layout.width,
+            );
+          }}
+        >
           <TouchableOpacity
-            style={[
-              styles.sectionTab,
-              activeSection === "posts" &&
-                styles.sectionTabActive,
-            ]}
+            style={styles.sectionTab}
+            activeOpacity={0.7}
             onPress={() => {
               setActiveSection("posts");
             }}
@@ -1484,11 +1508,8 @@ export default function ProfilePage() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[
-              styles.sectionTab,
-              activeSection === "favorites" &&
-                styles.sectionTabActive,
-            ]}
+            style={styles.sectionTab}
+            activeOpacity={0.7}
             onPress={() => {
               setActiveSection("favorites");
             }}
@@ -1503,6 +1524,24 @@ export default function ProfilePage() {
               收藏頁
             </Text>
           </TouchableOpacity>
+
+          {sectionTabsWidth > 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.sectionUnderline,
+                {
+                  width: sectionTabsWidth / 2,
+                  transform: [
+                    {
+                      translateX:
+                        sectionUnderlineTranslateX,
+                    },
+                  ],
+                },
+              ]}
+            />
+          ) : null}
         </View>
 
         {activeSection === "posts" ? (
@@ -1612,40 +1651,26 @@ export default function ProfilePage() {
                                 userId}
                             </Text>
 
-                            <View
-                              style={styles.postRowMetaRow}
-                            >
-                              <Text
-                                style={styles.postRowDate}
-                              >
-                                {parsePostDate(
-                                  post.createdAt,
-                                )?.toLocaleDateString(
-                                  "zh-TW",
-                                  {
-                                    year: "numeric",
-                                    month: "2-digit",
-                                    day: "2-digit",
-                                  },
-                                ) || "未知時間"}
+                            <View style={styles.postRowMetaRow}>
+                              <Text style={styles.postRowDate}>
+                                {parsePostDate(post.createdAt)
+                                  ? parsePostDate(post.createdAt).toLocaleDateString("zh-TW", {
+                                      year: "numeric",
+                                      month: "2-digit",
+                                      day: "2-digit",
+                                    })
+                                  : "未知時間"}
                               </Text>
-
-                              {((post.tags &&
-                                post.tags.length > 0) ||
-                                post.tag) ? (
-                                <Text
-                                  style={styles.postRowTag}
-                                  numberOfLines={1}
-                                >
-                                  #
-                                  {post.tags?.[0] ||
-                                    post.tag}
-                                </Text>
-                              ) : null}
                             </View>
                           </View>
                         </View>
-
+                        {((post.tags && post.tags.length > 0) || post.tag) ? (
+                          <View style={styles.postRowTagBadge}>
+                            <Text style={styles.postRowTagText} numberOfLines={1}>
+                              #{post.tags?.[0] || post.tag}
+                            </Text>
+                          </View>
+                        ) : null}
                         <View
                           style={styles.postRowContentRow}
                         >
@@ -1689,95 +1714,77 @@ export default function ProfilePage() {
             ) : (
               favoritePosts
                 .slice()
-                .sort((firstPost, secondPost) => {
-                  const firstDate =
-                    parsePostDate(
-                      firstPost.createdAt,
-                    ) || new Date(0);
+                .sort((a, b) => {
+                  const aDate =
+                    parsePostDate(a.createdAt) || new Date(0);
 
-                  const secondDate =
-                    parsePostDate(
-                      secondPost.createdAt,
-                    ) || new Date(0);
+                  const bDate =
+                    parsePostDate(b.createdAt) || new Date(0);
 
-                  return (
-                    secondDate.getTime() -
-                    firstDate.getTime()
-                  );
+                  return bDate.getTime() - aDate.getTime();
                 })
                 .map((post) => (
                   <TouchableOpacity
                     key={post.id}
                     style={styles.postRow}
                     onPress={() => {
-                      openPostDetail(post);
+                      setSelectedPostDetail(post);
+                      setDetailVisible(true);
                     }}
                   >
+                    {/* 頭貼、名稱、日期 */}
                     <View style={styles.postRowHeader}>
                       <Image
                         source={
                           post.authorAvatar
-                            ? {
-                                uri: post.authorAvatar,
-                              }
+                            ? { uri: post.authorAvatar }
                             : require("../../assets/avatar-placeholder.png")
                         }
                         style={styles.postRowAvatar}
                       />
 
-                      <View
-                        style={styles.postRowAuthorInfo}
-                      >
+                      <View style={styles.postRowAuthorInfo}>
                         <Text
                           style={styles.postRowName}
                           numberOfLines={1}
                         >
                           {profileMap[
-                            post.authorId ||
-                              post.deviceId
+                            post.authorId || post.deviceId
                           ]?.name ||
                             post.authorName ||
                             post.userId ||
                             userId}
                         </Text>
 
-                        <View
-                          style={styles.postRowMetaRow}
-                        >
-                          <Text
-                            style={styles.postRowDate}
-                          >
-                            {parsePostDate(
-                              post.createdAt,
-                            )?.toLocaleDateString(
-                              "zh-TW",
-                              {
+                        <Text style={styles.postRowDate}>
+                          {parsePostDate(post.createdAt)
+                            ? parsePostDate(
+                                post.createdAt,
+                              ).toLocaleDateString("zh-TW", {
                                 year: "numeric",
                                 month: "2-digit",
                                 day: "2-digit",
-                              },
-                            ) || "未知時間"}
-                          </Text>
-
-                          {((post.tags &&
-                            post.tags.length > 0) ||
-                            post.tag) ? (
-                            <Text
-                              style={styles.postRowTag}
-                              numberOfLines={1}
-                            >
-                              #
-                              {post.tags?.[0] ||
-                                post.tag}
-                            </Text>
-                          ) : null}
-                        </View>
+                              })
+                            : "未知時間"}
+                        </Text>
                       </View>
                     </View>
 
-                    <View
-                      style={styles.postRowContentRow}
-                    >
+                    {/* 標籤移到頭貼區塊下方 */}
+                    {((post.tags && post.tags.length > 0) ||
+                      post.tag) ? (
+                      <View style={styles.postRowTagBadge}>
+                        <Text
+                          style={styles.postRowTagText}
+                          numberOfLines={1}
+                        >
+                          #{post.tags?.[0] || post.tag}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {/* 貼文內文與縮圖 */}
+                    <View style={styles.postRowContentRow}>
                       <Text
                         style={[
                           styles.postRowContent,
@@ -1793,9 +1800,7 @@ export default function ProfilePage() {
                       {getPostThumbnailUrl(post) ? (
                         <Image
                           source={{
-                            uri: getPostThumbnailUrl(
-                              post,
-                            ),
+                            uri: getPostThumbnailUrl(post),
                           }}
                           style={styles.postRowThumbnail}
                         />
@@ -2147,7 +2152,7 @@ export default function ProfilePage() {
                     color={
                       isSendingComment
                         ? "#bbbbbb"
-                        : "#ff6b6b"
+                        : "#E07A7A"
                     }
                   />
                 </TouchableOpacity>
@@ -2173,7 +2178,7 @@ export default function ProfilePage() {
                     color={
                       isSendingComment
                         ? "#bbbbbb"
-                        : "#7b70c9"
+                        : "#B1D497"
                     }
                   />
                 </TouchableOpacity>
@@ -2193,7 +2198,7 @@ export default function ProfilePage() {
                     color={
                       isSendingComment
                         ? "#bbbbbb"
-                        : "#7b70c9"
+                        : "#B1D497"
                     }
                   />
                 </TouchableOpacity>
@@ -2249,7 +2254,7 @@ export default function ProfilePage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fdf9e1",
+    backgroundColor: "#F7F3EC",
   },
 
   containerContent: {
@@ -2271,7 +2276,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 80,
     paddingHorizontal: 25,
-    backgroundColor: "#e6e6e6",
+    backgroundColor: "#ffffff",
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     elevation: 10,
@@ -2356,7 +2361,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingVertical: 20,
     marginBottom: 15,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#F0F4EC",
     borderRadius: 20,
     elevation: 2,
     shadowColor: "#000000",
@@ -2394,39 +2399,43 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 32,
     fontWeight: "300",
-    color: "#d1a07a",
+    color: "#777",
   },
 
   sectionTabs: {
+    position: "relative",
     width: "100%",
     flexDirection: "row",
-    padding: 4,
-    marginBottom: 12,
-    backgroundColor: "#f6f2dd",
-    borderRadius: 16,
-    overflow: "hidden",
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E7E2D9",
   },
 
   sectionTab: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 14,
-  },
-
-  sectionTabActive: {
-    backgroundColor: "#d1a07a",
+    paddingVertical: 13,
   },
 
   sectionTabText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
-    color: "#666666",
+    color: "#999999",
   },
 
   sectionTabTextActive: {
-    color: "#ffffff",
+    color: "#777",
+    fontWeight: "700",
+  },
+
+  sectionUnderline: {
+    position: "absolute",
+    left: 0,
+    bottom: -1,
+    height: 3,
+    backgroundColor: "#777",
+    borderRadius: 3,
   },
 
   viewTabs: {
@@ -2441,12 +2450,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 10,
     marginRight: 8,
-    backgroundColor: "#f6f2dd",
+    backgroundColor: "#F0F4EC",
     borderRadius: 16,
   },
 
   viewTabActive: {
-    backgroundColor: "#d1a07a",
+    backgroundColor: "#B1D497",
   },
 
   viewTabText: {
@@ -2517,10 +2526,19 @@ const styles = StyleSheet.create({
     color: "#999999",
   },
 
-  postRowTag: {
-    marginLeft: 10,
+  postRowTagBadge: {
+    alignSelf: "flex-start",
+    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "#F0F4EC",
+    borderRadius: 14,
+  },
+
+  postRowTagText: {
     fontSize: 12,
-    color: "#6f5b00",
+    fontWeight: "600",
+    color: "#777",
   },
 
   postRowContentRow: {
@@ -2642,7 +2660,7 @@ const styles = StyleSheet.create({
 
   todayDayText: {
     fontWeight: "700",
-    color: "#7b70c9",
+    color: "#B1D497",
   },
 
   emptyDay: {

@@ -864,7 +864,7 @@ export default function HomeScreen() {
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: "#a29add",
+          backgroundColor: "#B1D497",
           justifyContent: "center",
           alignItems: "center",
         }}
@@ -893,7 +893,7 @@ export default function HomeScreen() {
             style={styles.sortBtn}
             onPress={() => setShowSortMenu(!showSortMenu)}
           >
-            <Ionicons name="filter" size={18} color="#7b70c9" />
+            <Ionicons name="filter" size={18} color="#777" />
             <Text style={styles.sortText}>{getSortText()}</Text>
           </TouchableOpacity>
         </View>
@@ -983,13 +983,13 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#7b70c9"
+            tintColor="#B1D497"
           />
         }
       >
         {filteredPosts.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Ionicons name="leaf-outline" size={48} color="#c7c1ea" />
+            <Ionicons name="leaf-outline" size={48} color="#F0F4EC" />
             <Text style={styles.emptyTitle}>目前沒有貼文</Text>
             <Text style={styles.emptyText}>按右下角的＋分享你的想法吧</Text>
           </View>
@@ -1081,10 +1081,10 @@ export default function HomeScreen() {
                     <Ionicons
                       name={hasLiked ? "heart" : "heart-outline"}
                       size={22}
-                      color={hasLiked ? "#ff4f7b" : "#999"}
+                      color={hasLiked ? "#E07A7A" : "#999"}
                     />
                     <Text
-                      style={[styles.actionText, hasLiked && styles.likedText]}
+                      style={styles.actionText}
                     >
                       {post.likes || 0}
                     </Text>
@@ -1100,7 +1100,7 @@ export default function HomeScreen() {
                     <Ionicons
                       name="chatbubble-outline"
                       size={21}
-                      color="#7b70c9"
+                      color="#7FA8B8"
                     />
                     <Text style={styles.actionText}>
                       {(post.comments || []).length}
@@ -1117,7 +1117,7 @@ export default function HomeScreen() {
                     <Ionicons
                       name={hasSaved ? "bookmark" : "bookmark-outline"}
                       size={21}
-                      color="#f0a94d"
+                      color="#D39B5E"
                     />
                     <Text style={styles.actionText}>
                       {(post.savedBy || []).length}
@@ -1198,7 +1198,7 @@ export default function HomeScreen() {
                   <Ionicons
                     name="camera"
                     size={20}
-                    color={isSendingComment ? "#bbb" : "#7b70c9"}
+                    color={isSendingComment ? "#bbb" : "#B1D497"}
                   />
                 </TouchableOpacity>
 
@@ -1213,7 +1213,7 @@ export default function HomeScreen() {
                   <Ionicons
                     name="image"
                     size={20}
-                    color={isSendingComment ? "#bbb" : "#7b70c9"}
+                    color={isSendingComment ? "#bbb" : "#B1D497"}
                   />
                 </TouchableOpacity>
               </View>
@@ -1414,33 +1414,42 @@ function PublishDialog({
     <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
       <SafeAreaView style={styles.publishContainer}>
         <View style={styles.publishHeader}>
-          <TouchableOpacity onPress={handleClose}>
+          <TouchableOpacity
+            style={styles.publishHeaderSide}
+            onPress={handleClose}
+          >
             <Text style={styles.cancelBtn}>取消</Text>
           </TouchableOpacity>
 
-          <Text style={styles.publishHeaderTitle}>發布新貼文</Text>
+          <Text style={styles.publishHeaderTitle}>
+            發布新貼文
+          </Text>
 
-          <TouchableOpacity
-            onPress={handlePublish}
-            disabled={isLoading || !canPublish}
-            style={[
-              styles.publishBtn,
-              (isLoading || !canPublish) && styles.publishBtnDisabled,
-            ]}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#999" />
-            ) : (
-              <Text
-                style={[
-                  styles.publishBtnText,
-                  !canPublish && styles.publishBtnTextDisabled,
-                ]}
-              >
-                發布
-              </Text>
-            )}
-          </TouchableOpacity>
+          <View style={styles.publishHeaderSideRight}>
+            <TouchableOpacity
+              onPress={handlePublish}
+              disabled={isLoading || !canPublish}
+              style={[
+                styles.publishBtn,
+                (isLoading || !canPublish) &&
+                  styles.publishBtnDisabled,
+              ]}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#999" />
+              ) : (
+                <Text
+                  style={[
+                    styles.publishBtnText,
+                    !canPublish &&
+                      styles.publishBtnTextDisabled,
+                  ]}
+                >
+                  發布
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView
@@ -1505,17 +1514,17 @@ function PublishDialog({
 
               <View style={styles.mediaButtonRow}>
                 <TouchableOpacity style={styles.mediaBtn} onPress={takePhoto}>
-                  <Ionicons name="camera" size={28} color="#a29add" />
+                  <Ionicons name="camera" size={28} color="#B1D497" />
                   <Text style={styles.mediaBtnText}>拍照</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.mediaBtn} onPress={pickPhoto}>
-                  <Ionicons name="image" size={28} color="#a29add" />
+                  <Ionicons name="image" size={28} color="#B1D497" />
                   <Text style={styles.mediaBtnText}>照片</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.mediaBtn} onPress={pickVideo}>
-                  <Ionicons name="videocam" size={28} color="#a29add" />
+                  <Ionicons name="videocam" size={28} color="#B1D497" />
                   <Text style={styles.mediaBtnText}>影片</Text>
                 </TouchableOpacity>
               </View>
@@ -1556,7 +1565,7 @@ function PublishDialog({
 const styles = StyleSheet.create({
   postDetailContainer: {
     flex: 1,
-    backgroundColor: "#f8f7ff",
+    backgroundColor: "#F0F4EC",
   },
   postDetailHeader: {
     height: 56,
@@ -1625,14 +1634,14 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "#f4f2fb",
+    backgroundColor: "#F0F4EC",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 8,
   },
   commentActionText: {
     fontSize: 12,
-    color: "#7b70c9",
+    color: "#B1D497",
     marginTop: 4,
   },
   commentImagePreviewContainer: {
@@ -1660,7 +1669,7 @@ const styles = StyleSheet.create({
   },
   commentInputInPage: {
     flex: 1,
-    backgroundColor: "#f4f2fb",
+    backgroundColor: "#F0F4EC",
     borderRadius: 22,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -1688,13 +1697,13 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "#a29add",
+    backgroundColor: "#B1D497",
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 10,
   },
   sendCommentBtnDisabled: {
-    backgroundColor: "#c9c5dd",
+    backgroundColor: "#F0F4EC",
   },
 
   commentActionBtnDisabled: {
@@ -1707,7 +1716,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: "#f8f7ff",
+    backgroundColor: "#F7F3EC",
   },
   topArea: {
     backgroundColor: "#fff",
@@ -1727,7 +1736,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f4f2fb",
+    backgroundColor: "#F0F4EC",
     borderRadius: 20,
     paddingHorizontal: 12,
     height: 42,
@@ -1742,13 +1751,13 @@ const styles = StyleSheet.create({
     height: 42,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f4f2fb",
+    backgroundColor: "#F0F4EC",
     paddingHorizontal: 12,
     borderRadius: 20,
   },
   sortText: {
     fontSize: 13,
-    color: "#7b70c9",
+    color: "#777",
     fontWeight: "700",
     marginLeft: 4,
   },
@@ -1782,11 +1791,11 @@ const styles = StyleSheet.create({
   filterTag: {
     paddingHorizontal: 13,
     paddingVertical: 7,
-    backgroundColor: "#f4f2fb",
+    backgroundColor: "#F0F4EC",
     borderRadius: 18,
   },
   filterTagSelected: {
-    backgroundColor: "#a29add",
+    backgroundColor: "#B1D497",
   },
   filterTagText: {
     color: "#777",
@@ -1849,7 +1858,7 @@ const styles = StyleSheet.create({
   },
   postTag: {
     alignSelf: "flex-start",
-    backgroundColor: "#f1efff",
+    backgroundColor: "#F0F4EC",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 14,
@@ -1862,7 +1871,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   postTagText: {
-    color: "#7b70c9",
+    color: "#777",
     fontSize: 13,
     fontWeight: "700",
   },
@@ -1870,7 +1879,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 15,
     lineHeight: 22,
-    color: "#333",
+    color: "#222",
   },
   postImage: {
     width: "100%",
@@ -1917,14 +1926,14 @@ const styles = StyleSheet.create({
   },
   commentPreview: {
     marginTop: 12,
-    backgroundColor: "#faf9ff",
+    backgroundColor: "#F0F4EC",
     borderRadius: 12,
     padding: 10,
   },
   commentPreviewTitle: {
     fontSize: 13,
     fontWeight: "bold",
-    color: "#7b70c9",
+    color: "#B1D497",
     marginBottom: 8,
   },
   commentItem: {
@@ -1952,7 +1961,7 @@ const styles = StyleSheet.create({
 
   commentSortBtns: {
     flexDirection: "row",
-    backgroundColor: "#f4f2fb",
+    backgroundColor: "#F0F4EC",
     borderRadius: 16,
     padding: 3,
   },
@@ -1964,7 +1973,7 @@ const styles = StyleSheet.create({
   },
 
   commentSortBtnActive: {
-    backgroundColor: "#a29add",
+    backgroundColor: "#B1D497",
   },
 
   commentSortText: {
@@ -1998,7 +2007,7 @@ const styles = StyleSheet.create({
     width: 62,
     height: 62,
     borderRadius: 31,
-    backgroundColor: "#a29add",
+    backgroundColor: "#B1D497",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -2028,7 +2037,7 @@ const styles = StyleSheet.create({
   },
   commentInput: {
     minHeight: 100,
-    backgroundColor: "#f7f6fb",
+    backgroundColor: "#F0F4EC",
     borderRadius: 14,
     padding: 12,
     fontSize: 15,
@@ -2055,7 +2064,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 18,
-    backgroundColor: "#a29add",
+    backgroundColor: "#B1D497",
   },
   submitCommentText: {
     color: "#fff",
@@ -2066,6 +2075,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   publishHeader: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2074,10 +2084,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderColor: "#eee",
   },
+
   publishHeaderTitle: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    textAlign: "center",
     fontSize: 18,
     fontWeight: "bold",
     color: "#333",
+  },
+
+  publishHeaderSide: {
+    minWidth: 70,
+    alignItems: "flex-start",
+    zIndex: 1,
+  },
+
+  publishHeaderSideRight: {
+    minWidth: 70,
+    alignItems: "flex-end",
+    zIndex: 1,
   },
   cancelBtn: {
     fontSize: 16,
@@ -2086,7 +2113,7 @@ const styles = StyleSheet.create({
   publishBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: "#a29add",
+    backgroundColor: "#B1D497",
     borderRadius: 20,
     minWidth: 62,
     alignItems: "center",
@@ -2123,7 +2150,7 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     marginRight: 12,
-    backgroundColor: "#a29add",
+    backgroundColor: "#B1D497",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2138,7 +2165,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   input: {
-    backgroundColor: "#f9f9f9",
+    backgroundColor: "#F7F3EC",
     borderRadius: 12,
     padding: 12,
     fontSize: 16,
@@ -2197,15 +2224,15 @@ const styles = StyleSheet.create({
   mediaBtn: {
     flex: 1,
     borderWidth: 1.5,
-    borderColor: "#a29add",
+    borderColor: "#B1D497",
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",
-    backgroundColor: "#fafafa",
+    backgroundColor: "#F7F3EC",
   },
   mediaBtnText: {
     fontSize: 14,
-    color: "#a29add",
+    color: "#B1D497",
     fontWeight: "bold",
     marginTop: 8,
   },
@@ -2227,14 +2254,14 @@ const styles = StyleSheet.create({
   tagBtn: {
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#F0F4EC",
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "#eee",
   },
   tagBtnSelected: {
-    backgroundColor: "#a29add",
-    borderColor: "#a29add",
+    backgroundColor: "#B1D497",
+    borderColor: "#B1D497",
   },
   tagText: {
     fontSize: 14,

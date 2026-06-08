@@ -498,7 +498,7 @@ export default function PostDetailModal({
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={handleRefreshComments}
-                  tintColor="#7b70c9"
+                  tintColor="#B1D497"
                 />
               }
               onContentSizeChange={() => {
@@ -613,16 +613,13 @@ export default function PostDetailModal({
                       size={22}
                       color={
                         hasLikedPost
-                          ? "#ff4f7b"
+                          ? "#E07A7A"
                           : "#999999"
                       }
                     />
 
                     <Text
-                      style={[
-                        styles.postActionText,
-                        hasLikedPost && styles.postLikedText,
-                      ]}
+                      style={styles.postActionText}
                     >
                       {post.likes || 0}
                     </Text>
@@ -635,7 +632,7 @@ export default function PostDetailModal({
                     <Ionicons
                       name="chatbubble-outline"
                       size={21}
-                      color="#7b70c9"
+                      color="#7FA8B8"
                     />
 
                     <Text style={styles.postActionText}>
@@ -657,7 +654,7 @@ export default function PostDetailModal({
                           : "bookmark-outline"
                       }
                       size={21}
-                      color="#f0a94d"
+                      color="#D39B5E"
                     />
 
                     <Text style={styles.postActionText}>
@@ -734,7 +731,7 @@ export default function PostDetailModal({
                     <Ionicons
                       name="chatbubble-ellipses-outline"
                       size={42}
-                      color="#c7c1ea"
+                      color="#F0F4EC"
                     />
 
                     <Text style={styles.noCommentText}>
@@ -849,7 +846,7 @@ export default function PostDetailModal({
                                   size={16}
                                   color={
                                     hasLikedComment
-                                      ? "#ff4f7b"
+                                      ? "#E07A7A"
                                       : "#999999"
                                   }
                                 />
@@ -891,7 +888,7 @@ const styles = StyleSheet.create({
 
   postDetailContainer: {
     flex: 1,
-    backgroundColor: "#f8f7ff",
+    backgroundColor: "#F7F3EC",
   },
 
   postDetailHeader: {
@@ -978,13 +975,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: "#f0ecff",
+    backgroundColor: "#F0F4EC",
   },
 
   postTagText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#7b70c9",
+    color: "#777",
   },
 
   postText: {
@@ -1009,7 +1006,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 12,
-    backgroundColor: "#8a7fc6",
+    backgroundColor: "#B1D497",
   },
 
   videoText: {
@@ -1042,7 +1039,7 @@ const styles = StyleSheet.create({
   },
 
   postLikedText: {
-    color: "#ff4f7b",
+    color: "#E07A7A",
   },
 
   detailCommentSection: {
@@ -1076,11 +1073,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: "#f4f2fb",
+    backgroundColor: "#F0F4EC",
   },
 
   commentSortBtnActive: {
-    backgroundColor: "#7b70c9",
+    backgroundColor: "#B1D497",
   },
 
   commentSortText: {
@@ -1117,7 +1114,7 @@ const styles = StyleSheet.create({
   },
 
   highlightedCommentItem: {
-    backgroundColor: "#e7ddff",
+    backgroundColor: "#F0F4EC",
   },
 
   commentContent: {
