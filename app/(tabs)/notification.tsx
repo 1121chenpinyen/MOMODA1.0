@@ -1,13 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   collection,
+  deleteDoc,
   doc,
   increment,
   onSnapshot,
   query,
   updateDoc,
   where,
-  deleteDoc,
 } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import {

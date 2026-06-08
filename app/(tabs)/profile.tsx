@@ -5,6 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import {
   arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -13,7 +14,6 @@ import {
   setDoc,
   updateDoc,
   where,
-  deleteDoc,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import {
