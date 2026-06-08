@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -11,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -35,13 +37,25 @@ interface PostDetailModalProps {
   visible: boolean;
   post: any;
   onClose: () => void;
+
+  // 從通知頁進入時，用來定位特定留言
   targetCommentId?: string | null;
+
+  // 貼文按讚與收藏功能
   currentUserId?: string;
+  onLikePost?: (post: any) => void;
+  onSavePost?: (post: any) => void;
+
+  onDeletePost?: (post: any) => void;
+
+  // 留言相關功能
   profileMap?: Record<string, any>;
   sortedComments?: Comment[];
   commentSortMode?: "new" | "likes";
   onCommentSortChange?: (mode: "new" | "likes") => void;
   onLikeComment?: (commentId: string) => void;
+
+  // 留言輸入框
   showCommentInput?: boolean;
   renderCommentInput?: () => ReactNode;
 }
@@ -94,21 +108,53 @@ function getCreatedAtValue(createdAt: any) {
   return Number.isNaN(dateValue) ? 0 : dateValue;
 }
 
+function areSameComment(firstComment: any, secondComment: any) {
+  if (firstComment === secondComment) {
+    return true;
+  }
+
+  if (
+    typeof firstComment === "string" ||
+    typeof secondComment === "string"
+  ) {
+    return firstComment === secondComment;
+  }
+
+  if (firstComment?.id && secondComment?.id) {
+    return firstComment.id === secondComment.id;
+  }
+
+  return (
+    firstComment?.text === secondComment?.text &&
+    firstComment?.userId === secondComment?.userId &&
+    getCreatedAtValue(firstComment?.createdAt) ===
+      getCreatedAtValue(secondComment?.createdAt)
+  );
+}
+
 function getCommentId(
   postId: string,
   comment: any,
-  index: number,
+  fallbackIndex: number,
+  originalComments: any[],
 ) {
   if (typeof comment !== "string" && comment?.id) {
     return comment.id;
   }
 
-  const createdAt =
+  const originalIndex = originalComments.findIndex((originalComment) =>
+    areSameComment(originalComment, comment),
+  );
+
+  const finalIndex =
+    originalIndex >= 0 ? originalIndex : fallbackIndex;
+
+  const createdAtValue =
     typeof comment === "string"
       ? 0
       : getCreatedAtValue(comment?.createdAt);
 
-  return `${postId}_${index}_${createdAt}`;
+  return `${postId}_${finalIndex}_${createdAtValue}`;
 }
 
 function getPostTags(post: any) {
@@ -146,8 +192,11 @@ export default function PostDetailModal({
   onClose,
   targetCommentId = null,
   currentUserId = "",
+  onLikePost,
+  onSavePost,
+  onDeletePost,
   profileMap = {},
-  sortedComments = [],
+  sortedComments,
   commentSortMode = "new",
   onCommentSortChange,
   onLikeComment,
@@ -156,25 +205,122 @@ export default function PostDetailModal({
 }: PostDetailModalProps) {
   const scrollViewRef = useRef<ScrollView>(null);
 
+  // 留言區塊相對於 ScrollView 的位置
   const commentSectionYRef = useRef(0);
 
+  // 每一則留言相對於留言區塊的位置
   const commentPositionsRef = useRef<Record<string, number>>({});
 
+  // 記錄閃爍動畫計時器
   const highlightTimersRef = useRef<
     ReturnType<typeof setTimeout>[]
   >([]);
 
+  /*
+    記錄目前已經顯示過提示動畫的留言。
+    在 Modal 沒有關閉前，不會清除這個值。
+    因此按讚、收藏或更新貼文時，不會再次閃爍。
+  */
   const revealedRequestRef = useRef("");
 
   const [highlightedCommentId, setHighlightedCommentId] =
     useState<string | null>(null);
 
+  const postId = post?.id || "";
+
   const postTags = post ? getPostTags(post) : [];
 
-  const comments =
-    sortedComments.length > 0
-      ? sortedComments
-      : post?.comments || [];
+  const originalComments = Array.isArray(post?.comments)
+    ? post.comments
+    : [];
+
+  /*
+    有傳入排序後留言時，使用排序後留言。
+    沒有傳入時，直接使用貼文內的留言。
+  */
+  const comments: any[] = sortedComments ?? originalComments;
+
+  const [orderedCommentIds, setOrderedCommentIds] = useState<string[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const computeOrderedCommentIds = (
+    commentList: any[],
+    mode: "new" | "likes",
+  ) => {
+    return [...commentList]
+      .map((comment, index) => ({
+        id: getCommentId(postId, comment, index, originalComments),
+        comment,
+      }))
+      .sort((a, b) => {
+        if (mode === "likes") {
+          return (b.comment.likes || 0) - (a.comment.likes || 0);
+        }
+
+        const timeA = getCreatedAtValue(a.comment.createdAt);
+        const timeB = getCreatedAtValue(b.comment.createdAt);
+        return timeB - timeA;
+      })
+      .map((item) => item.id);
+  };
+
+  const orderedComments = useMemo(() => {
+    if (orderedCommentIds.length === 0) {
+      return comments;
+    }
+
+    const commentMap = new Map(
+      comments.map((comment, index) => [
+        getCommentId(postId, comment, index, originalComments),
+        comment,
+      ]),
+    );
+
+    const ordered = orderedCommentIds
+      .map((id) => commentMap.get(id))
+      .filter((comment): comment is any => Boolean(comment));
+
+    const remaining = comments.filter((comment, index) => {
+      const id = getCommentId(postId, comment, index, originalComments);
+      return !orderedCommentIds.includes(id);
+    });
+
+    return [...ordered, ...remaining];
+  }, [comments, orderedCommentIds, originalComments, postId]);
+
+  const previousCommentSortModeRef = useRef<"new" | "likes">(
+    commentSortMode,
+  );
+
+  useEffect(() => {
+    if (
+      postId &&
+      (previousCommentSortModeRef.current !== commentSortMode ||
+        orderedCommentIds.length === 0)
+    ) {
+      setOrderedCommentIds(
+        computeOrderedCommentIds(comments, commentSortMode),
+      );
+    }
+
+    previousCommentSortModeRef.current = commentSortMode;
+  }, [commentSortMode, comments, orderedCommentIds.length, postId]);
+
+  const handleRefreshComments = () => {
+    setRefreshing(true);
+    setOrderedCommentIds(
+      computeOrderedCommentIds(comments, commentSortMode),
+    );
+    setRefreshing(false);
+  };
+
+  const hasLikedPost = (post?.likedBy || []).includes(currentUserId);
+
+  const hasSavedPost = (post?.savedBy || []).includes(currentUserId);
+  const isOwnPost =
+  !!currentUserId &&
+  (post?.authorId === currentUserId ||
+    post?.deviceId === currentUserId);
 
   const clearHighlightTimers = useCallback(() => {
     highlightTimersRef.current.forEach((timer) => {
@@ -193,23 +339,34 @@ export default function PostDetailModal({
     [],
   );
 
+  /*
+    自動捲動到從通知頁點擊的留言，並快速閃爍兩次。
+
+    重要：
+    dependency array 只監聽 postId，不監聽整個 post 物件。
+    因此收藏、按讚或留言更新後，不會重新觸發動畫。
+  */
   const revealTargetComment = useCallback(() => {
-    if (!visible || !post || !targetCommentId) {
+    if (!visible || !postId || !targetCommentId) {
       return;
     }
 
-    const requestKey = `${post.id}:${targetCommentId}`;
+    const requestKey = `${postId}:${targetCommentId}`;
 
+    // 同一次開啟期間已經執行過，不再重複播放
     if (revealedRequestRef.current === requestKey) {
       return;
     }
 
-    const commentY = commentPositionsRef.current[targetCommentId];
+    const commentY =
+      commentPositionsRef.current[targetCommentId];
 
+    // 留言尚未完成排版時，稍後會透過 onLayout 再次嘗試
     if (typeof commentY !== "number") {
       return;
     }
 
+    // 先記錄再執行動畫，避免 Firestore 更新後重新播放
     revealedRequestRef.current = requestKey;
 
     const scrollY =
@@ -223,29 +380,39 @@ export default function PostDetailModal({
     clearHighlightTimers();
 
     /*
-      顏色切換效果：
+      快速閃爍兩次：
       原色 → 淡紫色 → 原色 → 淡紫色 → 原色
     */
+    scheduleHighlightChange(() => {
+      setHighlightedCommentId(targetCommentId);
+    }, 100);
+
+    scheduleHighlightChange(() => {
+      setHighlightedCommentId(null);
+    }, 400);
 
     scheduleHighlightChange(() => {
       setHighlightedCommentId(targetCommentId);
-    }, 250);
+    }, 550);
 
     scheduleHighlightChange(() => {
       setHighlightedCommentId(null);
     }, 1050);
-
-    
   }, [
     clearHighlightTimers,
-    post,
+    postId,
     scheduleHighlightChange,
     targetCommentId,
     visible,
   ]);
 
+  /*
+    Modal 開啟時嘗試定位留言。
+    注意：這裡不會在 Modal 開啟期間重設 revealedRequestRef。
+  */
   useEffect(() => {
     if (!visible) {
+      // 關閉後才清除，下次重新進入時才會再次閃爍
       revealedRequestRef.current = "";
       setHighlightedCommentId(null);
       clearHighlightTimers();
@@ -253,28 +420,42 @@ export default function PostDetailModal({
       return;
     }
 
-    revealedRequestRef.current = "";
-
     const timer = setTimeout(() => {
       revealTargetComment();
-    }, 350);
+    }, 250);
 
     return () => {
       clearTimeout(timer);
     };
   }, [
     clearHighlightTimers,
-    post?.id,
+    postId,
     revealTargetComment,
     targetCommentId,
     visible,
   ]);
+
+  /*
+    切換至另一篇貼文時，清空前一篇貼文的位置紀錄。
+    同一篇貼文按讚或收藏時，postId 不變，所以不受影響。
+  */
+  useEffect(() => {
+    commentPositionsRef.current = {};
+    commentSectionYRef.current = 0;
+  }, [postId]);
 
   useEffect(() => {
     return () => {
       clearHighlightTimers();
     };
   }, [clearHighlightTimers]);
+
+  const scrollToComments = () => {
+    scrollViewRef.current?.scrollTo({
+      y: Math.max(commentSectionYRef.current - 12, 0),
+      animated: true,
+    });
+  };
 
   return (
     <Modal
@@ -289,7 +470,10 @@ export default function PostDetailModal({
       >
         <SafeAreaView style={styles.postDetailContainer}>
           <View style={styles.postDetailHeader}>
-            <TouchableOpacity onPress={onClose}>
+            <TouchableOpacity
+              style={styles.headerActionButton}
+              onPress={onClose}
+            >
               <Ionicons
                 name="chevron-back"
                 size={26}
@@ -301,7 +485,7 @@ export default function PostDetailModal({
               貼文詳情
             </Text>
 
-            <View style={styles.headerPlaceholder} />
+            <View style={styles.headerActionButton} />
           </View>
 
           {post ? (
@@ -310,7 +494,18 @@ export default function PostDetailModal({
               style={styles.postDetailContent}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefreshComments}
+                  tintColor="#7b70c9"
+                />
+              }
               onContentSizeChange={() => {
+                /*
+                  內容載入或圖片尺寸變化時再次嘗試定位。
+                  若已經顯示過動畫，revealTargetComment 會直接 return。
+                */
                 revealTargetComment();
               }}
             >
@@ -337,6 +532,21 @@ export default function PostDetailModal({
                       </Text>
                     </View>
                   </View>
+
+                  {isOwnPost && onDeletePost ? (
+                    <TouchableOpacity
+                      style={styles.deletePostButton}
+                      onPress={() => {
+                        onDeletePost(post);
+                      }}
+                    >
+                      <Ionicons
+                        name="trash-outline"
+                        size={20}
+                        color="#aaaaaa"
+                      />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
 
                 {postTags.length > 0 && (
@@ -384,6 +594,77 @@ export default function PostDetailModal({
                     </Text>
                   </View>
                 ) : null}
+
+                {/* 貼文按讚、留言、收藏 */}
+                <View style={styles.postActionRow}>
+                  <TouchableOpacity
+                    style={styles.postActionBtn}
+                    onPress={() => {
+                      onLikePost?.(post);
+                    }}
+                    disabled={!onLikePost}
+                  >
+                    <Ionicons
+                      name={
+                        hasLikedPost
+                          ? "heart"
+                          : "heart-outline"
+                      }
+                      size={22}
+                      color={
+                        hasLikedPost
+                          ? "#ff4f7b"
+                          : "#999999"
+                      }
+                    />
+
+                    <Text
+                      style={[
+                        styles.postActionText,
+                        hasLikedPost && styles.postLikedText,
+                      ]}
+                    >
+                      {post.likes || 0}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.postActionBtn}
+                    onPress={scrollToComments}
+                  >
+                    <Ionicons
+                      name="chatbubble-outline"
+                      size={21}
+                      color="#7b70c9"
+                    />
+
+                    <Text style={styles.postActionText}>
+                      {(post.comments || []).length}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.postActionBtn}
+                    onPress={() => {
+                      onSavePost?.(post);
+                    }}
+                    disabled={!onSavePost}
+                  >
+                    <Ionicons
+                      name={
+                        hasSavedPost
+                          ? "bookmark"
+                          : "bookmark-outline"
+                      }
+                      size={21}
+                      color="#f0a94d"
+                    />
+
+                    <Text style={styles.postActionText}>
+                      {(post.savedBy || []).length}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* 留言區段 */}
@@ -392,6 +673,8 @@ export default function PostDetailModal({
                 onLayout={(event) => {
                   commentSectionYRef.current =
                     event.nativeEvent.layout.y;
+
+                  revealTargetComment();
                 }}
               >
                 <View style={styles.commentSortHeader}>
@@ -407,7 +690,9 @@ export default function PostDetailModal({
                           commentSortMode === "new" &&
                             styles.commentSortBtnActive,
                         ]}
-                        onPress={() => onCommentSortChange("new")}
+                        onPress={() => {
+                          onCommentSortChange("new");
+                        }}
                       >
                         <Text
                           style={[
@@ -426,7 +711,9 @@ export default function PostDetailModal({
                           commentSortMode === "likes" &&
                             styles.commentSortBtnActive,
                         ]}
-                        onPress={() => onCommentSortChange("likes")}
+                        onPress={() => {
+                          onCommentSortChange("likes");
+                        }}
                       >
                         <Text
                           style={[
@@ -442,7 +729,7 @@ export default function PostDetailModal({
                   )}
                 </View>
 
-                {comments.length === 0 ? (
+                {orderedComments.length === 0 ? (
                   <View style={styles.noCommentBox}>
                     <Ionicons
                       name="chatbubble-ellipses-outline"
@@ -455,11 +742,12 @@ export default function PostDetailModal({
                     </Text>
                   </View>
                 ) : (
-                  comments.map((comment: any, index: number) => {
+                  orderedComments.map((comment: any, index: number) => {
                     const commentId = getCommentId(
-                      post.id,
+                      postId,
                       comment,
                       index,
+                      originalComments,
                     );
 
                     const commentText =
@@ -499,12 +787,21 @@ export default function PostDetailModal({
                         ? 0
                         : comment.likes || 0;
 
+                    const hasLikedComment =
+                      likedBy.includes(currentUserId);
+
                     return (
                       <View
                         key={commentId}
                         onLayout={(event) => {
                           commentPositionsRef.current[commentId] =
                             event.nativeEvent.layout.y;
+
+                          /*
+                            當目標留言剛完成排版時立刻嘗試定位。
+                            已顯示過的留言不會再次觸發動畫。
+                          */
+                          revealTargetComment();
                         }}
                         style={[
                           styles.commentItem,
@@ -536,23 +833,22 @@ export default function PostDetailModal({
                             </Text>
 
                             {onLikeComment &&
-                            typeof comment !== "string" &&
-                            comment.id ? (
+                            typeof comment !== "string" ? (
                               <TouchableOpacity
                                 onPress={() => {
-                                  onLikeComment(comment.id as string);
+                                  onLikeComment(commentId);
                                 }}
                                 style={styles.commentLikeBtn}
                               >
                                 <Ionicons
                                   name={
-                                    likedBy.includes(currentUserId)
+                                    hasLikedComment
                                       ? "heart"
                                       : "heart-outline"
                                   }
                                   size={16}
                                   color={
-                                    likedBy.includes(currentUserId)
+                                    hasLikedComment
                                       ? "#ff4f7b"
                                       : "#999999"
                                   }
@@ -615,8 +911,11 @@ const styles = StyleSheet.create({
     color: "#333333",
   },
 
-  headerPlaceholder: {
-    width: 26,
+  headerActionButton: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   postDetailContent: {
@@ -626,14 +925,24 @@ const styles = StyleSheet.create({
   },
 
   postDetailCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
     padding: 16,
     marginBottom: 14,
+    borderRadius: 20,
+    backgroundColor: "#ffffff",
   },
 
   postHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 8,
+  },
+
+  deletePostButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   authorArea: {
@@ -710,9 +1019,35 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
 
+  postActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 0.5,
+    borderTopColor: "#eeeeee",
+  },
+
+  postActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 22,
+  },
+
+  postActionText: {
+    marginLeft: 5,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#666666",
+  },
+
+  postLikedText: {
+    color: "#ff4f7b",
+  },
+
   detailCommentSection: {
-    marginBottom: 100,
     padding: 16,
+    marginBottom: 100,
     borderRadius: 20,
     backgroundColor: "#ffffff",
   },

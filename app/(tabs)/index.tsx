@@ -2,34 +2,35 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import {
-    addDoc,
-    arrayUnion,
-    collection,
-    deleteDoc,
-    doc,
-    increment,
-    onSnapshot,
-    orderBy,
-    query,
-    serverTimestamp,
-    updateDoc,
-    where
+  addDoc,
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  increment,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Keyboard,
-    Modal,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Image,
+  Keyboard,
+  Modal,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import PostDetailModal from "../../components/PostDetailModal";
@@ -37,13 +38,13 @@ import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
 import { getRandomVariantForTag } from "../../utils/plantCatalog";
 import {
-    claimPendingPlantGrowth,
-    claimPendingRewardsOnce,
-    createPlantForPost,
-    getGarden,
-    getGlobalData,
-    growPlant,
-    updateGlobalData,
+  claimPendingPlantGrowth,
+  claimPendingRewardsOnce,
+  createPlantForPost,
+  getGarden,
+  getGlobalData,
+  growPlant,
+  updateGlobalData,
 } from "../../utils/storage";
 
 const TAGS = [
@@ -142,10 +143,16 @@ export default function HomeScreen() {
   const [commentText, setCommentText] = useState("");
   const [commentImage, setCommentImage] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  // 發送留言時使用
+  const [isSendingComment, setIsSendingComment] = useState(false);
+  // 防止使用者在畫面重新渲染前快速連點兩次
+  const isSendingCommentRef = useRef(false);
   const [profileMap, setProfileMap] = useState<Record<string, any>>({});
   const [searchText, setSearchText] = useState("");
   const [selectedFilterTag, setSelectedFilterTag] = useState("");
   const [sortMode, setSortMode] = useState<"new" | "likes" | "saves">("new");
+  const [orderedPostIds, setOrderedPostIds] = useState<string[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [commentSortMode, setCommentSortMode] = useState<"new" | "likes">(
     "new",
@@ -404,6 +411,20 @@ export default function HomeScreen() {
   const filteredPosts = useMemo(() => {
     let result = [...posts];
 
+    if (sortMode === "likes" || sortMode === "saves") {
+      if (orderedPostIds.length > 0) {
+        const orderedMap = new Map(result.map((post) => [post.id, post]));
+        const orderedPosts = orderedPostIds
+          .map((id) => orderedMap.get(id))
+          .filter((post): post is PostType => Boolean(post));
+
+        const remainingPosts = result.filter(
+          (post) => !orderedPostIds.includes(post.id),
+        );
+        result = [...orderedPosts, ...remainingPosts];
+      }
+    }
+
     if (searchText.trim()) {
       result = result.filter((post) =>
         post.text?.toLowerCase().includes(searchText.trim().toLowerCase()),
@@ -417,14 +438,6 @@ export default function HomeScreen() {
       });
     }
 
-    if (sortMode === "saves") {
-      result.sort((a, b) => {
-        const savesA = (a.savedBy || []).length;
-        const savesB = (b.savedBy || []).length;
-        return savesB - savesA;
-      });
-    }
-
     if (sortMode === "new") {
       result.sort((a, b) => {
         const timeA = a.createdAt?.seconds || 0;
@@ -433,14 +446,55 @@ export default function HomeScreen() {
       });
     }
 
-    if (sortMode === "likes") {
-      result.sort((a, b) => (b.likes || 0) - (a.likes || 0));
-    }
-
     return result;
-  }, [posts, searchText, selectedFilterTag, sortMode]);
+  }, [posts, searchText, selectedFilterTag, sortMode, orderedPostIds]);
 
   const selectedPostTags = selectedPost ? getPostTags(selectedPost) : [];
+
+  const computeOrderedPostIds = (
+    postsToOrder: PostType[],
+    mode: "likes" | "saves",
+  ) => {
+    return [...postsToOrder]
+      .sort((a, b) => {
+        if (mode === "likes") {
+          return (b.likes || 0) - (a.likes || 0);
+        }
+        return (b.savedBy || []).length - (a.savedBy || []).length;
+      })
+      .map((post) => post.id);
+  };
+
+  const refreshOrderedPosts = (mode: "likes" | "saves") => {
+    setOrderedPostIds(computeOrderedPostIds(posts, mode));
+  };
+
+  const previousSortModeRef = useRef<"new" | "likes" | "saves">("new");
+
+  useEffect(() => {
+    if (sortMode === "new") {
+      setOrderedPostIds([]);
+      previousSortModeRef.current = sortMode;
+      return;
+    }
+
+    if (
+      previousSortModeRef.current !== sortMode ||
+      orderedPostIds.length === 0
+    ) {
+      setOrderedPostIds(computeOrderedPostIds(posts, sortMode));
+    }
+
+    previousSortModeRef.current = sortMode;
+  }, [sortMode, posts, orderedPostIds.length]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    if (sortMode === "likes" || sortMode === "saves") {
+      refreshOrderedPosts(sortMode);
+    }
+    setRefreshing(false);
+  };
 
   const uploadMediaAsync = async (media: MediaType | null) => {
     if (!media) return null;
@@ -529,20 +583,41 @@ export default function HomeScreen() {
     }
   };
 
+  const updatePostInState = (updatedPost: PostType) => {
+    setPosts((previousPosts) =>
+      previousPosts.map((item) =>
+        item.id === updatedPost.id ? updatedPost : item,
+      ),
+    );
+
+    if (selectedPost?.id === updatedPost.id) {
+      setSelectedPost(updatedPost);
+    }
+  };
+
   const handleLike = async (post: PostType) => {
     if (!currentUser.userId) return;
 
     const likedBy = post.likedBy || [];
     const hasLiked = likedBy.includes(currentUser.userId);
 
+    const updatedPost: PostType = {
+      ...post,
+      likes: (post.likes || 0) + (hasLiked ? -1 : 1),
+      likedBy: hasLiked
+        ? likedBy.filter((id) => id !== currentUser.userId)
+        : [...likedBy, currentUser.userId],
+    };
+
+    updatePostInState(updatedPost);
+
     try {
       await updateDoc(doc(db, "posts", post.id), {
-        likes: increment(hasLiked ? -1 : 1),
-        likedBy: hasLiked
-          ? likedBy.filter((id) => id !== currentUser.userId)
-          : [...likedBy, currentUser.userId],
+        likes: updatedPost.likes,
+        likedBy: updatedPost.likedBy,
       });
     } catch {
+      updatePostInState(post);
       Alert.alert("發生錯誤", "無法更新按讚");
     }
   };
@@ -553,13 +628,21 @@ export default function HomeScreen() {
     const savedBy = post.savedBy || [];
     const hasSaved = savedBy.includes(currentUser.userId);
 
+    const updatedPost: PostType = {
+      ...post,
+      savedBy: hasSaved
+        ? savedBy.filter((id) => id !== currentUser.userId)
+        : [...savedBy, currentUser.userId],
+    };
+
+    updatePostInState(updatedPost);
+
     try {
       await updateDoc(doc(db, "posts", post.id), {
-        savedBy: hasSaved
-          ? savedBy.filter((id) => id !== currentUser.userId)
-          : [...savedBy, currentUser.userId],
+        savedBy: updatedPost.savedBy,
       });
     } catch {
+      updatePostInState(post);
       Alert.alert("發生錯誤", "無法收藏");
     }
   };
@@ -616,9 +699,17 @@ export default function HomeScreen() {
   };
 
   const handleAddComment = async () => {
-    if (!selectedPost) return;
+    // 已經正在傳送時，直接忽略後續點擊
+    if (isSendingCommentRef.current) {
+      return;
+    }
+
+    if (!selectedPost) {
+      return;
+    }
 
     const trimmedText = commentText.trim();
+
     if (!trimmedText && !commentImage) {
       Alert.alert("請輸入留言或加上照片");
       return;
@@ -629,18 +720,26 @@ export default function HomeScreen() {
       return;
     }
 
+    // 在開始執行非同步操作前立刻鎖定
+    isSendingCommentRef.current = true;
+    setIsSendingComment(true);
+
     try {
       const oldComments = selectedPost.comments || [];
+
       const postOwnerId =
         selectedPost.authorId || selectedPost.deviceId || null;
 
       let imageUrl: string | undefined;
+
       if (commentImage) {
         imageUrl = await uploadCommentImageAsync(commentImage);
       }
 
       const newComment: CommentType = {
-        id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        id: `comment_${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 8)}`,
         text: trimmedText,
         userId: currentUser.userId,
         userName: currentUser.name,
@@ -660,8 +759,7 @@ export default function HomeScreen() {
       try {
         const garden = await getGarden();
 
-        // 自己留言自己的貼文：直接讓本機花園立刻成長
-        // 別人留言你的貼文：把成長寫到貼文上，讓作者之後領取
+        // 自己留言自己的貼文：讓本機花園立刻成長
         if (postOwnerId && postOwnerId === currentUser.userId) {
           for (const plant of garden.plants || []) {
             if (plant.postId === selectedPost.id) {
@@ -669,20 +767,25 @@ export default function HomeScreen() {
             }
           }
         } else if (selectedPost.id) {
+          // 回覆別人的貼文：記錄作者尚未領取的成長次數
           await updateDoc(doc(db, "posts", selectedPost.id), {
             pendingGrowth: increment(1),
           });
         }
 
-        // 回覆他人貼文時 +3 水滴
+        // 回覆貼文後增加 3 個水滴
         const globalData = await getGlobalData();
         const newWaterDrops = (globalData.waterDrops || 0) + 3;
-        await updateGlobalData({ waterDrops: newWaterDrops });
+
+        await updateGlobalData({
+          waterDrops: newWaterDrops,
+        });
       } catch (gardenError) {
         console.error("更新花園成長失敗:", gardenError);
       }
 
       Keyboard.dismiss();
+
       setSelectedPost({
         ...selectedPost,
         comments: updatedComments,
@@ -692,7 +795,15 @@ export default function HomeScreen() {
       setCommentImage(null);
     } catch (error: any) {
       console.error("留言失敗:", error);
-      Alert.alert("留言失敗", error?.message || "請稍後再試");
+
+      Alert.alert(
+        "留言失敗",
+        error?.message || "請稍後再試",
+      );
+    } finally {
+      // 不論成功或失敗，都必須解除鎖定
+      isSendingCommentRef.current = false;
+      setIsSendingComment(false);
     }
   };
 
@@ -713,6 +824,11 @@ export default function HomeScreen() {
         onPress: async () => {
           try {
             await deleteDoc(doc(db, "posts", post.id));
+
+            if (selectedPost?.id === post.id) {
+              setCommentVisible(false);
+              setSelectedPost(null);
+            }
           } catch {
             Alert.alert("刪除失敗", "請稍後再試");
           }
@@ -860,7 +976,17 @@ export default function HomeScreen() {
         </ScrollView>
       </View>
 
-      <ScrollView style={styles.feed} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.feed}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#7b70c9"
+          />
+        }
+      >
         {filteredPosts.length === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="leaf-outline" size={48} color="#c7c1ea" />
@@ -875,7 +1001,12 @@ export default function HomeScreen() {
             const hasSaved = savedBy.includes(currentUser.userId);
 
             return (
-              <View key={post.id} style={styles.postCard}>
+              <TouchableOpacity
+                key={post.id}
+                style={styles.postCard}
+                activeOpacity={0.96}
+                onPress={() => openCommentModal(post)}
+              >
                 <View style={styles.postHeader}>
                   <View style={styles.authorArea}>
                     {renderAvatar(
@@ -897,7 +1028,12 @@ export default function HomeScreen() {
                   </View>
 
                   {isMyPost && (
-                    <TouchableOpacity onPress={() => handleDeletePost(post)}>
+                    <TouchableOpacity
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        handleDeletePost(post);
+                      }}
+                    >
                       <Ionicons name="trash-outline" size={20} color="#aaa" />
                     </TouchableOpacity>
                   )}
@@ -937,7 +1073,10 @@ export default function HomeScreen() {
                 <View style={styles.actionRow}>
                   <TouchableOpacity
                     style={styles.actionBtn}
-                    onPress={() => handleLike(post)}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      handleLike(post);
+                    }}
                   >
                     <Ionicons
                       name={hasLiked ? "heart" : "heart-outline"}
@@ -953,7 +1092,10 @@ export default function HomeScreen() {
 
                   <TouchableOpacity
                     style={styles.actionBtn}
-                    onPress={() => openCommentModal(post)}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      openCommentModal(post);
+                    }}
                   >
                     <Ionicons
                       name="chatbubble-outline"
@@ -967,7 +1109,10 @@ export default function HomeScreen() {
 
                   <TouchableOpacity
                     style={styles.actionBtn}
-                    onPress={() => handleSave(post)}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      handleSave(post);
+                    }}
                   >
                     <Ionicons
                       name={hasSaved ? "bookmark" : "bookmark-outline"}
@@ -979,7 +1124,7 @@ export default function HomeScreen() {
                     </Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
@@ -1014,6 +1159,9 @@ export default function HomeScreen() {
         commentSortMode={commentSortMode}
         onCommentSortChange={setCommentSortMode}
         onLikeComment={handleLikeComment}
+        onLikePost={handleLike}
+        onSavePost={handleSave}
+        onDeletePost={handleDeletePost}
         showCommentInput={true}
         renderCommentInput={() => (
           <>
@@ -1026,8 +1174,13 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   style={styles.removeCommentImageBtn}
                   onPress={() => setCommentImage(null)}
+                  disabled={isSendingComment}
                 >
-                  <Ionicons name="close-circle" size={24} color="#ff6b6b" />
+                  <Ionicons
+                    name="close-circle"
+                    size={24}
+                    color={isSendingComment ? "#bbbbbb" : "#ff6b6b"}
+                  />
                 </TouchableOpacity>
               </View>
             ) : null}
@@ -1035,32 +1188,65 @@ export default function HomeScreen() {
             <View style={styles.commentInputBar}>
               <View style={styles.commentInputActions}>
                 <TouchableOpacity
-                  style={styles.commentActionBtn}
+                  style={[
+                    styles.commentActionBtn,
+                    isSendingComment && styles.commentActionBtnDisabled,
+                  ]}
                   onPress={takeCommentPhoto}
+                  disabled={isSendingComment}
                 >
-                  <Ionicons name="camera" size={20} color="#7b70c9" />
+                  <Ionicons
+                    name="camera"
+                    size={20}
+                    color={isSendingComment ? "#bbb" : "#7b70c9"}
+                  />
                 </TouchableOpacity>
+
                 <TouchableOpacity
-                  style={styles.commentActionBtn}
+                  style={[
+                    styles.commentActionBtn,
+                    isSendingComment && styles.commentActionBtnDisabled,
+                  ]}
                   onPress={pickCommentPhoto}
+                  disabled={isSendingComment}
                 >
-                  <Ionicons name="image" size={20} color="#7b70c9" />
+                  <Ionicons
+                    name="image"
+                    size={20}
+                    color={isSendingComment ? "#bbb" : "#7b70c9"}
+                  />
                 </TouchableOpacity>
               </View>
 
               <TextInput
-                style={styles.commentInputInPage}
-                placeholder="輸入你的留言..."
+                style={[
+                  styles.commentInputInPage,
+                  isSendingComment && styles.commentInputDisabled,
+                ]}
+                placeholder={
+                  isSendingComment
+                    ? "留言發送中..."
+                    : "輸入你的留言..."
+                }
                 placeholderTextColor="#aaa"
                 value={commentText}
                 onChangeText={setCommentText}
+                editable={!isSendingComment}
               />
 
               <TouchableOpacity
-                style={styles.sendCommentBtn}
+                style={[
+                  styles.sendCommentBtn,
+                  isSendingComment && styles.sendCommentBtnDisabled,
+                ]}
                 onPress={handleAddComment}
+                disabled={isSendingComment}
               >
-                <Ionicons name="send" size={20} color="#fff" />
+                {isSendingComment ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Ionicons name="send" size={20} color="#ffffff" />
+                )}
               </TouchableOpacity>
             </View>
           </>
@@ -1506,6 +1692,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 10,
+  },
+  sendCommentBtnDisabled: {
+    backgroundColor: "#c9c5dd",
+  },
+
+  commentActionBtnDisabled: {
+    backgroundColor: "#eeeeee",
+  },
+
+  commentInputDisabled: {
+    backgroundColor: "#eeeeee",
+    color: "#999999",
   },
   container: {
     flex: 1,

@@ -1,15 +1,24 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  increment,
+  onSnapshot,
+  query,
+  updateDoc,
+  where,
+  deleteDoc,
+} from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -103,7 +112,8 @@ export default function NotificationPage() {
   const [targetCommentId, setTargetCommentId] = useState<string | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
 
-  const [commentSortMode, setCommentSortMode] = useState<"new" | "likes">("new");
+  const [commentSortMode, setCommentSortMode] =
+    useState<"new" | "likes">("new");
 
   useEffect(() => {
     getDeviceId().then((id) => {
@@ -149,12 +159,15 @@ export default function NotificationPage() {
       postQuery,
       (snapshot) => {
         const items: any[] = [];
+        const latestPosts: any[] = [];
 
         snapshot.docs.forEach((document) => {
           const post = {
             id: document.id,
             ...document.data(),
           } as any;
+
+          latestPosts.push(post);
 
           const comments = Array.isArray(post.comments)
             ? post.comments
@@ -190,6 +203,23 @@ export default function NotificationPage() {
         });
 
         setNotifications(items);
+
+        /*
+          詳情畫面已開啟時，持續同步 Firestore 的最新貼文資料。
+          按讚或收藏後，Modal 裡面的數字和圖示會立即更新。
+        */
+        setSelectedPost((previousPost: any | null) => {
+          if (!previousPost) {
+            return previousPost;
+          }
+
+          const latestPost = latestPosts.find(
+            (post) => post.id === previousPost.id,
+          );
+
+          return latestPost || previousPost;
+        });
+
         setLoading(false);
       },
       (error) => {
@@ -208,6 +238,7 @@ export default function NotificationPage() {
       comments.sort((a: any, b: any) => {
         const timeA = getCreatedAtValue(a.createdAt);
         const timeB = getCreatedAtValue(b.createdAt);
+
         return timeB - timeA;
       });
     }
@@ -221,44 +252,151 @@ export default function NotificationPage() {
     return comments;
   }, [selectedPost?.comments, commentSortMode]);
 
-  const handleLikeComment = async (commentId: string) => {
-    if (!selectedPost || !deviceId) return;
+  /*
+    貼文按讚：
+    邏輯和首頁一致。
+  */
+  const handleLikePost = async (post: any) => {
+    if (!deviceId || !post?.id) {
+      return;
+    }
 
-    const originalComment = (selectedPost.comments || []).find(
-      (c: any) => c.id === commentId,
-    );
-    const previouslyLiked = originalComment?.likedBy?.includes(deviceId);
+    const likedBy = Array.isArray(post.likedBy)
+      ? post.likedBy
+      : [];
 
-    const updatedComments = (selectedPost.comments || []).map((c: any) => {
-      if (c.id !== commentId) return c;
+    const hasLiked = likedBy.includes(deviceId);
 
-      const likedBy = c.likedBy || [];
-      const hasLiked = likedBy.includes(deviceId);
-
-      const nextComment = {
-        ...c,
-        likes: (c.likes || 0) + (hasLiked ? -1 : 1),
+    try {
+      await updateDoc(doc(db, "posts", post.id), {
+        likes: increment(hasLiked ? -1 : 1),
         likedBy: hasLiked
           ? likedBy.filter((id: string) => id !== deviceId)
           : [...likedBy, deviceId],
-      };
+      });
+    } catch (error) {
+      console.error("貼文按讚失敗:", error);
+      Alert.alert("發生錯誤", "無法更新按讚");
+    }
+  };
 
-      return nextComment;
-    });
+  /*
+    貼文收藏：
+    邏輯和首頁一致。
+  */
+  const handleSavePost = async (post: any) => {
+    if (!deviceId || !post?.id) {
+      return;
+    }
+
+    const savedBy = Array.isArray(post.savedBy)
+      ? post.savedBy
+      : [];
+
+    const hasSaved = savedBy.includes(deviceId);
 
     try {
-      const finalComments = updatedComments;
+      await updateDoc(doc(db, "posts", post.id), {
+        savedBy: hasSaved
+          ? savedBy.filter((id: string) => id !== deviceId)
+          : [...savedBy, deviceId],
+      });
+    } catch (error) {
+      console.error("貼文收藏失敗:", error);
+      Alert.alert("發生錯誤", "無法更新收藏");
+    }
+  };
+  const handleDeletePost = (post: any) => {
+    if (!deviceId || !post?.id) {
+      return;
+    }
 
+    const isOwnPost =
+      post.authorId === deviceId ||
+      post.deviceId === deviceId;
+
+    if (!isOwnPost) {
+      Alert.alert("無法刪除", "你只能刪除自己發出的貼文");
+
+      return;
+    }
+
+    Alert.alert(
+      "刪除貼文",
+      "確定要刪除這則貼文嗎？",
+      [
+        {
+          text: "取消",
+          style: "cancel",
+        },
+        {
+          text: "刪除",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, "posts", post.id));
+
+              setDetailVisible(false);
+              setSelectedPost(null);
+              setTargetCommentId(null);
+
+              Alert.alert("已刪除貼文");
+            } catch (error) {
+              console.error("刪除貼文失敗:", error);
+
+              Alert.alert(
+                "刪除失敗",
+                "請稍後再試",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  /*
+    留言按讚：
+    保留通知頁原本已有的功能。
+  */
+  const handleLikeComment = async (commentId: string) => {
+    if (!selectedPost || !deviceId) {
+      return;
+    }
+
+    const updatedComments = (selectedPost.comments || []).map(
+      (comment: any) => {
+        if (comment.id !== commentId) {
+          return comment;
+        }
+
+        const likedBy = Array.isArray(comment.likedBy)
+          ? comment.likedBy
+          : [];
+
+        const hasLiked = likedBy.includes(deviceId);
+
+        return {
+          ...comment,
+          likes: (comment.likes || 0) + (hasLiked ? -1 : 1),
+          likedBy: hasLiked
+            ? likedBy.filter((id: string) => id !== deviceId)
+            : [...likedBy, deviceId],
+        };
+      },
+    );
+
+    try {
       await updateDoc(doc(db, "posts", selectedPost.id), {
-        comments: finalComments,
+        comments: updatedComments,
       });
 
       setSelectedPost({
         ...selectedPost,
-        comments: finalComments,
+        comments: updatedComments,
       });
-    } catch (e) {
-      console.error("留言按讚失敗:", e);
+    } catch (error) {
+      console.error("留言按讚失敗:", error);
       Alert.alert("錯誤", "留言按讚失敗");
     }
   };
@@ -394,10 +532,13 @@ export default function NotificationPage() {
           targetCommentId={targetCommentId}
           onClose={closePostDetail}
           currentUserId={deviceId}
+          onLikePost={handleLikePost}
+          onSavePost={handleSavePost}
           sortedComments={sortedComments}
           commentSortMode={commentSortMode}
           onCommentSortChange={setCommentSortMode}
           onLikeComment={handleLikeComment}
+          onDeletePost={handleDeletePost}
         />
       </View>
     </SafeAreaView>
