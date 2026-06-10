@@ -1,8 +1,8 @@
 import { Image, StyleSheet, Text, View } from "react-native";
 import {
-  DEFAULT_PLANT_IMAGE_OFFSETS,
-  DEFAULT_PLANT_IMAGE_SIZES,
-  DEFAULT_PLANT_IMAGE_XOFFSETS,
+    DEFAULT_PLANT_IMAGE_OFFSETS,
+    DEFAULT_PLANT_IMAGE_SIZES,
+    DEFAULT_PLANT_IMAGE_XOFFSETS,
 } from "../constants/plantImageSizes";
 import { getAssetForPlant, getFallbackEmoji } from "../utils/plantCatalog";
 
@@ -36,7 +36,14 @@ export default function FlowerCard({
     : undefined;
 
   const defaultSize = rawIndex === -1 ? 144 : 112;
-  const imageSize = typeof sizeFromMap === "number" ? sizeFromMap : defaultSize;
+  const baseImageSize =
+    typeof sizeFromMap === "number" ? sizeFromMap : defaultSize;
+
+  // 若植物已枯萎，放大顯示圖片（維持底部置中）
+  const WILTED_IMAGE_SCALE = 1.6;
+  const imageSize = plant?.wiltedAt
+    ? Math.round(baseImageSize * WILTED_IMAGE_SCALE)
+    : baseImageSize;
 
   const imageStyle = [
     styles.plantImage,

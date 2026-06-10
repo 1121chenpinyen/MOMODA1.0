@@ -225,6 +225,8 @@ export const initGarden = async () => {
       seeds: 0, // 種子數量
       plants: [], // 已種植的植物
       layoutVersion: 2,
+      // 已解鎖的區域數（持久化）：預設為 1，除非使用者點選清除全部時會重置
+      unlockedZones: 1,
     };
     await AsyncStorage.setItem("garden", JSON.stringify(garden));
   }
@@ -249,6 +251,11 @@ export const updateGarden = async (newData) => {
       newData.positions !== undefined
         ? newData.positions
         : garden.positions || {},
+    // 保留 unlockedZones（若 caller 明確傳入則使用新值，否則保留舊值）
+    unlockedZones:
+      newData.unlockedZones !== undefined
+        ? newData.unlockedZones
+        : garden.unlockedZones || 1,
   };
   // 標記最後修改時間，便於前端檢查變更
   try {
@@ -290,9 +297,8 @@ export const createPlantForPost = async (seedType, postId) => {
   let name = typeNameMap[seedType] || seedType;
   let rarity = "common";
 
-  // 生命倒数：3天 = 72小时
   const now = new Date();
-  const lifeExpireAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const lifeExpireAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000); // 發文生成的植物生命為 3 天
 
   const newPlant = {
     id: `plant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -309,6 +315,15 @@ export const createPlantForPost = async (seedType, postId) => {
   };
 
   garden.plants.push(newPlant);
+
+  // 檢查是否應該提升已解鎖的區域數（解鎖是永久的，直到 clearAllPlants 被呼叫）
+  try {
+    const plantCount = (garden.plants || []).length;
+    const desiredZones = plantCount >= 40 ? 3 : plantCount >= 20 ? 2 : 1;
+    garden.unlockedZones = Math.max(garden.unlockedZones || 1, desiredZones);
+  } catch (e) {
+    // ignore
+  }
 
   // 為新植物分配初始位置
   const positions = garden.positions || {};
@@ -329,7 +344,13 @@ export const createPlantForPost = async (seedType, postId) => {
     "pos",
     positions[newPlant.id],
   );
-  await updateGarden({ plants: garden.plants, positions });
+  await updateGarden({
+    plants: garden.plants,
+    positions,
+    unlockedZones: garden.unlockedZones,
+    lastSpawnedPlantId: newPlant.id,
+    lastSpawnedPosition: positions[newPlant.id],
+  });
   console.log("createPlantForPost: updateGarden called for plant", newPlant.id);
 
   // 立即讀取並 log garden，協助確認 AsyncStorage 已被寫入
@@ -376,9 +397,19 @@ export const plantSeed = async (seedType, postId) => {
     locked: false,
     createdAt: new Date().toISOString(),
     postId: postId || null, // 關聯的貼文 ID
+    lifeExpireAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 植物生命為 3 天
   };
 
   garden.plants.push(newPlant);
+
+  // 檢查是否應該提升已解鎖的區域數（解鎖是永久的，直到 clearAllPlants 被呼叫）
+  try {
+    const plantCount = (garden.plants || []).length;
+    const desiredZones = plantCount >= 40 ? 3 : plantCount >= 20 ? 2 : 1;
+    garden.unlockedZones = Math.max(garden.unlockedZones || 1, desiredZones);
+  } catch (e) {
+    // ignore
+  }
 
   const positions = garden.positions || {};
   const chosenZone = pickPlantZone(garden);
@@ -396,7 +427,13 @@ export const plantSeed = async (seedType, postId) => {
     "pos",
     positions[newPlant.id],
   );
-  await updateGarden({ plants: garden.plants, positions });
+  await updateGarden({
+    plants: garden.plants,
+    positions,
+    unlockedZones: garden.unlockedZones,
+    lastSpawnedPlantId: newPlant.id,
+    lastSpawnedPosition: positions[newPlant.id],
+  });
   console.log("plantSeed: updateGarden called for plant", newPlant.id);
 
   try {
@@ -452,6 +489,37 @@ export const isPlantDead = (plant) => {
   return getPlantRemainingLife(plant) <= 0;
 };
 
+// 將已枯萎但尚未標記的植物補上枯萎時間，並保留在花園中
+export const markWiltedPlants = async (gardenInput = null) => {
+  const garden = gardenInput || (await getGarden());
+  const plants = garden.plants || [];
+  const wiltedAt = new Date().toISOString();
+
+  let changed = false;
+  const updatedPlants = plants.map((plant) => {
+    if (isPlantDead(plant) && !plant.wiltedAt) {
+      changed = true;
+      return {
+        ...plant,
+        wiltedAt,
+      };
+    }
+    return plant;
+  });
+
+  if (!changed) {
+    return garden;
+  }
+
+  const updatedGarden = {
+    ...garden,
+    plants: updatedPlants,
+  };
+
+  await updateGarden(updatedGarden);
+  return updatedGarden;
+};
+
 // 移除已成熟的植物（可選，用於清理花園）
 export const removePlant = async (plantId) => {
   const garden = await getGarden();
@@ -467,6 +535,8 @@ export const clearAllPlants = async () => {
   const garden = await getGarden();
   garden.plants = [];
   garden.positions = {};
+  // 清除時重置解鎖區域
+  garden.unlockedZones = 1;
   await updateGarden(garden);
   return garden;
 };

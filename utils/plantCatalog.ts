@@ -98,6 +98,21 @@ export const ASSET_MAP: Record<string, any[]> = {
   ],
 };
 
+const DEAD_ASSET_MAP: Record<string, any> = {
+  eat1: require("../assets/plant/eat1/cu.png"),
+  eat2: require("../assets/plant/eat2/cu.png"),
+  mood1: require("../assets/plant/mood1/cu.png"),
+  mood2: require("../assets/plant/mood2/cu.png"),
+  love1: require("../assets/plant/love1/cu.png"),
+  love2: require("../assets/plant/love2/cu.png"),
+  sport1: require("../assets/plant/sport1/cu.png"),
+  sport2: require("../assets/plant/sport2/cu.png"),
+  entertainment1: require("../assets/plant/entertainment1/cu.png"),
+  entertainment2: require("../assets/plant/entertainment2/cu.png"),
+  pet1: require("../assets/plant/pet1/cu.png"),
+  pet2: require("../assets/plant/pet2/cu.png"),
+};
+
 // 這些分類會自動生成植物，且從對應兩個變體隨機選 1 個
 export const TAG_TO_VARIANTS: Record<string, string[]> = {
   運動: ["sport1", "sport2"],
@@ -135,6 +150,11 @@ export const getRandomVariantForTag = (tag: string): string | null => {
 
 export const getAssetForPlant = (plant: any) => {
   if (!plant || !plant.type) return null;
+
+  if (plant.wiltedAt) {
+    return DEAD_ASSET_MAP[plant.type] || null;
+  }
+
   const arr = ASSET_MAP[plant.type];
   if (!arr) return null;
   const idx = Math.abs(plant.imageIndex || -1) - 1; // 0-based
