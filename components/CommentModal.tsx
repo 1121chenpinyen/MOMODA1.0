@@ -16,7 +16,6 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useEffect, useState } from "react";
 import {
-    Alert,
     FlatList,
     Image,
     Modal,
@@ -25,10 +24,9 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
 import { db, storage } from "../config/firebaseConfig";
-import { getGarden, growPlant } from "../utils/storage";
 
 interface CommentModalProps {
   visible: boolean;
@@ -186,31 +184,13 @@ export default function CommentModal({
         isComment: true,
       });
 
-      // 🌱 植物成長邏輯：
-      // - 自己留言自己的貼文：直接更新本機花園，立即看到成長
-      // - 別人留言你的貼文：把成長寫到貼文上，等作者打開花園再領取
+      // 🌱 植物成長邏輯已修改：自我回覆不會造成植物成長
       if (post?.deviceId) {
         try {
           if (userDeviceId === post.deviceId) {
-            const garden = await getGarden();
-            for (const plant of garden.plants || []) {
-              if (plant.postId === post.id) {
-                await growPlant(plant.id, 1);
-              }
-            }
-
-            const updatedGarden = await getGarden();
-            const plantsWithProgress = (updatedGarden.plants || []).filter(
-              (p: any) => p.postId === post.id && p.repliesCount % 5 === 0 && p.repliesCount > 0,
-            );
-
-            if (plantsWithProgress.length > 0) {
-              Alert.alert(
-                "🌱 植物成長",
-                `你的 ${plantsWithProgress.length} 株植物获得新的回覆，正在成長！`,
-              );
-            }
+            // 自己回覆自己的貼文：不觸發植物成長，也不會給水滴
           } else {
+            // 別人回覆你的貼文：把成長寫到貼文上，等作者打開花園再領取
             await updateDoc(doc(db, "posts", post.id), {
               pendingGrowth: increment(1),
             });

@@ -36,8 +36,7 @@ import { getDeviceId } from "../../utils/getDeviceId";
 import {
   getGarden,
   getGlobalData,
-  growPlant,
-  updateGlobalData,
+  updateGlobalData
 } from "../../utils/storage";
 
 const READ_NOTIFICATIONS_STORAGE_KEY = "read_notification_ids";
@@ -649,24 +648,16 @@ export default function NotificationPage() {
         const garden = await getGarden();
 
         if (postOwnerId && postOwnerId === deviceId) {
-          for (const plant of garden.plants || []) {
-            if (plant.postId === selectedPost.id) {
-              await growPlant(plant.id, 1);
-            }
-          }
+          // 自己回覆自己的貼文：不觸發植物成長，也不會給水滴
         } else if (selectedPost.id) {
           await updateDoc(doc(db, "posts", selectedPost.id), {
             pendingGrowth: increment(1),
           });
+
+          const globalData = await getGlobalData();
+          const newWaterDrops = (globalData.waterDrops || 0) + 3;
+          await updateGlobalData({ waterDrops: newWaterDrops });
         }
-
-        const globalData = await getGlobalData();
-
-        const newWaterDrops = (globalData.waterDrops || 0) + 3;
-
-        await updateGlobalData({
-          waterDrops: newWaterDrops,
-        });
       } catch (gardenError) {
         console.error("更新花園成長失敗:", gardenError);
       }

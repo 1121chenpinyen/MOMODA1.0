@@ -13,7 +13,7 @@ import {
   query,
   serverTimestamp,
   updateDoc,
-  where
+  where,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -43,19 +43,10 @@ import {
   createPlantForPost,
   getGarden,
   getGlobalData,
-  growPlant,
-  updateGlobalData,
+  updateGlobalData
 } from "../../utils/storage";
 
-const TAGS = [
-  "人際",
-  "學業/工作",
-  "飲食",
-  "運動",
-  "寵物",
-  "娛樂",
-  "其他",
-];
+const TAGS = ["人際", "學業/工作", "飲食", "運動", "寵物", "娛樂", "其他"];
 
 type MediaType = {
   url: string;
@@ -122,11 +113,7 @@ function formatTime(createdAt: any) {
 }
 
 const getPostTags = (post: PostType) =>
-  post.tags && post.tags.length > 0
-    ? post.tags
-    : post.tag
-    ? [post.tag]
-    : [];
+  post.tags && post.tags.length > 0 ? post.tags : post.tag ? [post.tag] : [];
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -571,10 +558,10 @@ export default function HomeScreen() {
         await createPlantForPost(variant, postRef.id);
         setPublishVisible(false);
         router.push("/garden");
-        Alert.alert("成功", `貼文已發布，植物已在花園長出來了！`);
+        // non-blocking: garden screen will show a top banner for spawned plant
       } else {
         setPublishVisible(false);
-        Alert.alert("成功", "貼文已發布！");
+        // show a short non-blocking confirmation by navigating back or UI update
       }
     } catch (error: any) {
       Alert.alert("發布失敗", error?.message || "請稍後再試");
@@ -737,9 +724,7 @@ export default function HomeScreen() {
       }
 
       const newComment: CommentType = {
-        id: `comment_${Date.now()}_${Math.random()
-          .toString(36)
-          .slice(2, 8)}`,
+        id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         text: trimmedText,
         userId: currentUser.userId,
         userName: currentUser.name,
@@ -761,25 +746,17 @@ export default function HomeScreen() {
 
         // 自己留言自己的貼文：讓本機花園立刻成長
         if (postOwnerId && postOwnerId === currentUser.userId) {
-          for (const plant of garden.plants || []) {
-            if (plant.postId === selectedPost.id) {
-              await growPlant(plant.id, 1);
-            }
-          }
+          // 自己回覆自己的貼文：不觸發植物成長，也不會給水滴
         } else if (selectedPost.id) {
-          // 回覆別人的貼文：記錄作者尚未領取的成長次數
+          // 回覆別人的貼文：記錄作者尚未領取的成長次數，並給予水滴
           await updateDoc(doc(db, "posts", selectedPost.id), {
             pendingGrowth: increment(1),
           });
+
+          const globalData = await getGlobalData();
+          const newWaterDrops = (globalData.waterDrops || 0) + 3;
+          await updateGlobalData({ waterDrops: newWaterDrops });
         }
-
-        // 回覆貼文後增加 3 個水滴
-        const globalData = await getGlobalData();
-        const newWaterDrops = (globalData.waterDrops || 0) + 3;
-
-        await updateGlobalData({
-          waterDrops: newWaterDrops,
-        });
       } catch (gardenError) {
         console.error("更新花園成長失敗:", gardenError);
       }
@@ -796,10 +773,7 @@ export default function HomeScreen() {
     } catch (error: any) {
       console.error("留言失敗:", error);
 
-      Alert.alert(
-        "留言失敗",
-        error?.message || "請稍後再試",
-      );
+      Alert.alert("留言失敗", error?.message || "請稍後再試");
     } finally {
       // 不論成功或失敗，都必須解除鎖定
       isSendingCommentRef.current = false;
@@ -1083,11 +1057,7 @@ export default function HomeScreen() {
                       size={22}
                       color={hasLiked ? "#E07A7A" : "#999"}
                     />
-                    <Text
-                      style={styles.actionText}
-                    >
-                      {post.likes || 0}
-                    </Text>
+                    <Text style={styles.actionText}>{post.likes || 0}</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -1224,9 +1194,7 @@ export default function HomeScreen() {
                   isSendingComment && styles.commentInputDisabled,
                 ]}
                 placeholder={
-                  isSendingComment
-                    ? "留言發送中..."
-                    : "輸入你的留言..."
+                  isSendingComment ? "留言發送中..." : "輸入你的留言..."
                 }
                 placeholderTextColor="#aaa"
                 value={commentText}
@@ -1408,7 +1376,8 @@ function PublishDialog({
     resetForm();
   };
 
-  const canPublish = selectedTags.length > 0 && (!!postText.trim() || !!selectedMedia);
+  const canPublish =
+    selectedTags.length > 0 && (!!postText.trim() || !!selectedMedia);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
@@ -1421,9 +1390,7 @@ function PublishDialog({
             <Text style={styles.cancelBtn}>取消</Text>
           </TouchableOpacity>
 
-          <Text style={styles.publishHeaderTitle}>
-            發布新貼文
-          </Text>
+          <Text style={styles.publishHeaderTitle}>發布新貼文</Text>
 
           <View style={styles.publishHeaderSideRight}>
             <TouchableOpacity
@@ -1431,8 +1398,7 @@ function PublishDialog({
               disabled={isLoading || !canPublish}
               style={[
                 styles.publishBtn,
-                (isLoading || !canPublish) &&
-                  styles.publishBtnDisabled,
+                (isLoading || !canPublish) && styles.publishBtnDisabled,
               ]}
             >
               {isLoading ? (
@@ -1441,8 +1407,7 @@ function PublishDialog({
                 <Text
                   style={[
                     styles.publishBtnText,
-                    !canPublish &&
-                      styles.publishBtnTextDisabled,
+                    !canPublish && styles.publishBtnTextDisabled,
                   ]}
                 >
                   發布

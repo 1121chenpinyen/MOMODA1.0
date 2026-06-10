@@ -16,13 +16,7 @@ import {
   where,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -44,8 +38,7 @@ import { getDeviceId } from "../../utils/getDeviceId";
 import {
   getGarden,
   getGlobalData,
-  growPlant,
-  updateGlobalData,
+  updateGlobalData
 } from "../../utils/storage";
 
 const { width } = Dimensions.get("window");
@@ -64,53 +57,49 @@ export default function ProfilePage() {
   const [tempId, setTempId] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
 
-  const [calendarMonth, setCalendarMonth] =
-    useState<Date>(new Date());
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
-  const [postDays, setPostDays] =
-    useState<Record<string, boolean>>({});
+  const [postDays, setPostDays] = useState<Record<string, boolean>>({});
 
-  const [activeSection, setActiveSection] =
-    useState<"posts" | "favorites">("posts");
+  const [activeSection, setActiveSection] = useState<"posts" | "favorites">(
+    "posts",
+  );
   // 貼文頁／收藏頁底線滑動動畫
-  const [sectionTabsWidth, setSectionTabsWidth] =
-    useState(0);
+  const [sectionTabsWidth, setSectionTabsWidth] = useState(0);
 
-  const sectionUnderlineAnim =
-    useRef(new Animated.Value(0)).current;
+  const sectionUnderlineAnim = useRef(new Animated.Value(0)).current;
 
-  const [postViewMode, setPostViewMode] =
-    useState<"time" | "calendar">("time");
+  const [postViewMode, setPostViewMode] = useState<"time" | "calendar">("time");
 
   const [myPosts, setMyPosts] = useState<any[]>([]);
   const [favoritePosts, setFavoritePosts] = useState<any[]>([]);
 
   const [detailVisible, setDetailVisible] = useState(false);
 
-  const [selectedPostDetail, setSelectedPostDetail] =
-    useState<any | null>(null);
+  const [selectedPostDetail, setSelectedPostDetail] = useState<any | null>(
+    null,
+  );
 
-  const [selectedCalendarDay, setSelectedCalendarDay] =
-    useState<string | null>(null);
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<string | null>(
+    null,
+  );
 
-  const [profileMap, setProfileMap] =
-    useState<Record<string, any>>({});
+  const [profileMap, setProfileMap] = useState<Record<string, any>>({});
 
   // 留言相關狀態
-  const [commentSortMode, setCommentSortMode] =
-    useState<"new" | "likes">("new");
+  const [commentSortMode, setCommentSortMode] = useState<"new" | "likes">(
+    "new",
+  );
 
   const [commentText, setCommentText] = useState("");
-  const [commentImage, setCommentImage] =
-    useState<string | null>(null);
+  const [commentImage, setCommentImage] = useState<string | null>(null);
 
   /*
     避免重複發送留言：
     state 控制 Loading 畫面；
     ref 會在畫面重新渲染前立刻鎖定。
   */
-  const [isSendingComment, setIsSendingComment] =
-    useState(false);
+  const [isSendingComment, setIsSendingComment] = useState(false);
 
   const isSendingCommentRef = useRef(false);
 
@@ -128,14 +117,11 @@ export default function ProfilePage() {
     receivedComments: 0,
   });
 
-  const sentPostsSlideAnim =
-    useRef(new Animated.Value(0)).current;
+  const sentPostsSlideAnim = useRef(new Animated.Value(0)).current;
 
-  const sentCommentsSlideAnim =
-    useRef(new Animated.Value(0)).current;
+  const sentCommentsSlideAnim = useRef(new Animated.Value(0)).current;
 
-  const receivedCommentsSlideAnim =
-    useRef(new Animated.Value(0)).current;
+  const receivedCommentsSlideAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     getDeviceId().then(setDeviceId);
@@ -177,23 +163,23 @@ export default function ProfilePage() {
         return;
       }
 
-      getDoc(
-        doc(collection(db, "profiles"), authorId as string),
-      ).then((snapshot) => {
-        if (!snapshot.exists()) {
-          return;
-        }
+      getDoc(doc(collection(db, "profiles"), authorId as string)).then(
+        (snapshot) => {
+          if (!snapshot.exists()) {
+            return;
+          }
 
-        const data = snapshot.data();
+          const data = snapshot.data();
 
-        setProfileMap((previousMap) => ({
-          ...previousMap,
-          [authorId as string]: {
-            name: data.userId || "匿名小夥伴",
-            avatar: data.avatarUrl || "",
-          },
-        }));
-      });
+          setProfileMap((previousMap) => ({
+            ...previousMap,
+            [authorId as string]: {
+              name: data.userId || "匿名小夥伴",
+              avatar: data.avatarUrl || "",
+            },
+          }));
+        },
+      );
     });
   }, [myPosts, favoritePosts, deviceId, profileMap]);
 
@@ -219,11 +205,7 @@ export default function ProfilePage() {
         sentPosts: stats.sentPosts,
       }));
     });
-  }, [
-    stats.sentPosts,
-    prevStats.sentPosts,
-    sentPostsSlideAnim,
-  ]);
+  }, [stats.sentPosts, prevStats.sentPosts, sentPostsSlideAnim]);
 
   useEffect(() => {
     if (stats.sentComments === prevStats.sentComments) {
@@ -244,17 +226,10 @@ export default function ProfilePage() {
         sentComments: stats.sentComments,
       }));
     });
-  }, [
-    stats.sentComments,
-    prevStats.sentComments,
-    sentCommentsSlideAnim,
-  ]);
+  }, [stats.sentComments, prevStats.sentComments, sentCommentsSlideAnim]);
 
   useEffect(() => {
-    if (
-      stats.receivedComments ===
-      prevStats.receivedComments
-    ) {
+    if (stats.receivedComments === prevStats.receivedComments) {
       return;
     }
 
@@ -282,19 +257,13 @@ export default function ProfilePage() {
     詳情畫面中的留言排序
   */
   const sortedComments = useMemo(() => {
-    const comments = [
-      ...(selectedPostDetail?.comments || []),
-    ];
+    const comments = [...(selectedPostDetail?.comments || [])];
 
     if (commentSortMode === "new") {
       comments.sort((firstComment: any, secondComment: any) => {
-        const firstTime = new Date(
-          firstComment.createdAt || 0,
-        ).getTime();
+        const firstTime = new Date(firstComment.createdAt || 0).getTime();
 
-        const secondTime = new Date(
-          secondComment.createdAt || 0,
-        ).getTime();
+        const secondTime = new Date(secondComment.createdAt || 0).getTime();
 
         return secondTime - firstTime;
       });
@@ -302,10 +271,7 @@ export default function ProfilePage() {
 
     if (commentSortMode === "likes") {
       comments.sort((firstComment: any, secondComment: any) => {
-        return (
-          (secondComment.likes || 0) -
-          (firstComment.likes || 0)
-        );
+        return (secondComment.likes || 0) - (firstComment.likes || 0);
       });
     }
 
@@ -321,10 +287,7 @@ export default function ProfilePage() {
   */
   const updatePostInLocalState = (updatedPost: any) => {
     setSelectedPostDetail((previousPost: any | null) => {
-      if (
-        !previousPost ||
-        previousPost.id !== updatedPost.id
-      ) {
+      if (!previousPost || previousPost.id !== updatedPost.id) {
         return previousPost;
       }
 
@@ -348,9 +311,7 @@ export default function ProfilePage() {
       );
 
       if (!hasSaved) {
-        return previousPosts.filter(
-          (post) => post.id !== updatedPost.id,
-        );
+        return previousPosts.filter((post) => post.id !== updatedPost.id);
       }
 
       if (alreadyExists) {
@@ -372,18 +333,13 @@ export default function ProfilePage() {
       return;
     }
 
-    const likedBy = Array.isArray(post.likedBy)
-      ? post.likedBy
-      : [];
+    const likedBy = Array.isArray(post.likedBy) ? post.likedBy : [];
 
     const hasLiked = likedBy.includes(deviceId);
 
     const updatedPost = {
       ...post,
-      likes: Math.max(
-        0,
-        (post.likes || 0) + (hasLiked ? -1 : 1),
-      ),
+      likes: Math.max(0, (post.likes || 0) + (hasLiked ? -1 : 1)),
       likedBy: hasLiked
         ? likedBy.filter((id: string) => id !== deviceId)
         : [...likedBy, deviceId],
@@ -419,18 +375,14 @@ export default function ProfilePage() {
       return;
     }
 
-    const savedBy = Array.isArray(post.savedBy)
-      ? post.savedBy
-      : [];
+    const savedBy = Array.isArray(post.savedBy) ? post.savedBy : [];
 
     const hasSaved = savedBy.includes(deviceId);
 
     const updatedPost = {
       ...post,
       savedBy: hasSaved
-        ? savedBy.filter(
-            (id: string) => id !== deviceId,
-          )
+        ? savedBy.filter((id: string) => id !== deviceId)
         : [...savedBy, deviceId],
     };
 
@@ -453,9 +405,7 @@ export default function ProfilePage() {
       return;
     }
 
-    const isOwnPost =
-      post.authorId === deviceId ||
-      post.deviceId === deviceId;
+    const isOwnPost = post.authorId === deviceId || post.deviceId === deviceId;
 
     if (!isOwnPost) {
       Alert.alert("無法刪除", "你只能刪除自己發出的貼文");
@@ -463,49 +413,38 @@ export default function ProfilePage() {
       return;
     }
 
-    Alert.alert(
-      "刪除貼文",
-      "確定要刪除這則貼文嗎？",
-      [
-        {
-          text: "取消",
-          style: "cancel",
+    Alert.alert("刪除貼文", "確定要刪除這則貼文嗎？", [
+      {
+        text: "取消",
+        style: "cancel",
+      },
+      {
+        text: "刪除",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteDoc(doc(db, "posts", post.id));
+
+            setMyPosts((previousPosts) =>
+              previousPosts.filter((item) => item.id !== post.id),
+            );
+
+            setFavoritePosts((previousPosts) =>
+              previousPosts.filter((item) => item.id !== post.id),
+            );
+
+            setSelectedPostDetail(null);
+            setDetailVisible(false);
+
+            Alert.alert("已刪除貼文");
+          } catch (error) {
+            console.error("刪除貼文失敗:", error);
+
+            Alert.alert("刪除失敗", "請稍後再試");
+          }
         },
-        {
-          text: "刪除",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteDoc(doc(db, "posts", post.id));
-
-              setMyPosts((previousPosts) =>
-                previousPosts.filter(
-                  (item) => item.id !== post.id,
-                ),
-              );
-
-              setFavoritePosts((previousPosts) =>
-                previousPosts.filter(
-                  (item) => item.id !== post.id,
-                ),
-              );
-
-              setSelectedPostDetail(null);
-              setDetailVisible(false);
-
-              Alert.alert("已刪除貼文");
-            } catch (error) {
-              console.error("刪除貼文失敗:", error);
-
-              Alert.alert(
-                "刪除失敗",
-                "請稍後再試",
-              );
-            }
-          },
-        },
-      ],
-    );
+      },
+    ]);
   };
 
   /*
@@ -517,9 +456,7 @@ export default function ProfilePage() {
       return;
     }
 
-    const originalComments = Array.isArray(
-      selectedPostDetail.comments,
-    )
+    const originalComments = Array.isArray(selectedPostDetail.comments)
       ? selectedPostDetail.comments
       : [];
 
@@ -531,39 +468,27 @@ export default function ProfilePage() {
       return;
     }
 
-    const previouslyLiked = Array.isArray(
-      originalComment.likedBy,
-    )
+    const previouslyLiked = Array.isArray(originalComment.likedBy)
       ? originalComment.likedBy.includes(deviceId)
       : false;
 
-    const updatedComments = originalComments.map(
-      (comment: any) => {
-        if (comment.id !== commentId) {
-          return comment;
-        }
+    const updatedComments = originalComments.map((comment: any) => {
+      if (comment.id !== commentId) {
+        return comment;
+      }
 
-        const likedBy = Array.isArray(comment.likedBy)
-          ? comment.likedBy
-          : [];
+      const likedBy = Array.isArray(comment.likedBy) ? comment.likedBy : [];
 
-        const hasLiked = likedBy.includes(deviceId);
+      const hasLiked = likedBy.includes(deviceId);
 
-        return {
-          ...comment,
-          likes: Math.max(
-            0,
-            (comment.likes || 0) +
-              (hasLiked ? -1 : 1),
-          ),
-          likedBy: hasLiked
-            ? likedBy.filter(
-                (id: string) => id !== deviceId,
-              )
-            : [...likedBy, deviceId],
-        };
-      },
-    );
+      return {
+        ...comment,
+        likes: Math.max(0, (comment.likes || 0) + (hasLiked ? -1 : 1)),
+        likedBy: hasLiked
+          ? likedBy.filter((id: string) => id !== deviceId)
+          : [...likedBy, deviceId],
+      };
+    });
 
     const likedComment = updatedComments.find(
       (comment: any) => comment.id === commentId,
@@ -584,9 +509,7 @@ export default function ProfilePage() {
             return comment;
           }
 
-          const existingRewards = Array.isArray(
-            comment.fertilizerRewards,
-          )
+          const existingRewards = Array.isArray(comment.fertilizerRewards)
             ? comment.fertilizerRewards
             : [];
 
@@ -612,12 +535,9 @@ export default function ProfilePage() {
     updatePostInLocalState(updatedPost);
 
     try {
-      await updateDoc(
-        doc(db, "posts", selectedPostDetail.id),
-        {
-          comments: finalComments,
-        },
-      );
+      await updateDoc(doc(db, "posts", selectedPostDetail.id), {
+        comments: finalComments,
+      });
     } catch (error) {
       console.error("留言按讚失敗:", error);
 
@@ -650,29 +570,23 @@ export default function ProfilePage() {
       return;
     }
 
-    const { status } =
-      await ImagePicker.requestCameraPermissionsAsync();
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
 
     if (status !== "granted") {
-      Alert.alert(
-        "權限不足",
-        "需要相機權限才能拍照",
-      );
+      Alert.alert("權限不足", "需要相機權限才能拍照");
 
       return;
     }
 
-    const result =
-      await ImagePicker.launchCameraAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.7,
-      });
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.7,
+    });
 
     if (!result.canceled) {
-      const uri =
-        result.assets?.[0]?.uri || (result as any).uri;
+      const uri = result.assets?.[0]?.uri || (result as any).uri;
 
       if (uri) {
         setCommentImage(uri);
@@ -688,29 +602,23 @@ export default function ProfilePage() {
       return;
     }
 
-    const { status } =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (status !== "granted") {
-      Alert.alert(
-        "權限不足",
-        "需要相簿權限才能選取照片",
-      );
+      Alert.alert("權限不足", "需要相簿權限才能選取照片");
 
       return;
     }
 
-    const result =
-      await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        quality: 0.7,
-        selectionLimit: 1,
-      });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.7,
+      selectionLimit: 1,
+    });
 
     if (!result.canceled) {
-      const uri =
-        result.assets?.[0]?.uri || (result as any).uri;
+      const uri = result.assets?.[0]?.uri || (result as any).uri;
 
       if (uri) {
         setCommentImage(uri);
@@ -749,28 +657,21 @@ export default function ProfilePage() {
     setIsSendingComment(true);
 
     try {
-      const oldComments = Array.isArray(
-        selectedPostDetail.comments,
-      )
+      const oldComments = Array.isArray(selectedPostDetail.comments)
         ? selectedPostDetail.comments
         : [];
 
       const postOwnerId =
-        selectedPostDetail.authorId ||
-        selectedPostDetail.deviceId ||
-        null;
+        selectedPostDetail.authorId || selectedPostDetail.deviceId || null;
 
       let imageUrl: string | undefined;
 
       if (commentImage) {
-        imageUrl =
-          await uploadCommentImageAsync(commentImage);
+        imageUrl = await uploadCommentImageAsync(commentImage);
       }
 
       const newComment = {
-        id: `comment_${Date.now()}_${Math.random()
-          .toString(36)
-          .slice(2, 8)}`,
+        id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         text: trimmedText,
         userId: deviceId,
         userName: userId || "匿名小夥伴",
@@ -781,17 +682,11 @@ export default function ProfilePage() {
         ...(imageUrl ? { imageUrl } : {}),
       };
 
-      const updatedComments = [
-        ...oldComments,
-        newComment,
-      ];
+      const updatedComments = [...oldComments, newComment];
 
-      await updateDoc(
-        doc(db, "posts", selectedPostDetail.id),
-        {
-          comments: arrayUnion(newComment),
-        },
-      );
+      await updateDoc(doc(db, "posts", selectedPostDetail.id), {
+        comments: arrayUnion(newComment),
+      });
 
       try {
         const garden = await getGarden();
@@ -801,42 +696,19 @@ export default function ProfilePage() {
           本機花園立即成長。
         */
         if (postOwnerId && postOwnerId === deviceId) {
-          for (const plant of garden.plants || []) {
-            if (
-              plant.postId === selectedPostDetail.id
-            ) {
-              await growPlant(plant.id, 1);
-            }
-          }
+          // 自己回覆自己的貼文：不觸發植物成長，也不會給水滴
         } else if (selectedPostDetail.id) {
-          /*
-            留言別人的貼文：
-            更新作者尚未領取的成長次數。
-          */
-          await updateDoc(
-            doc(db, "posts", selectedPostDetail.id),
-            {
-              pendingGrowth: increment(1),
-            },
-          );
+          // 回覆別人的貼文：記錄作者尚未領取的成長次數，並給予水滴
+          await updateDoc(doc(db, "posts", selectedPostDetail.id), {
+            pendingGrowth: increment(1),
+          });
+
+          const globalData = await getGlobalData();
+          const newWaterDrops = (globalData.waterDrops || 0) + 3;
+          await updateGlobalData({ waterDrops: newWaterDrops });
         }
-
-        /*
-          回覆貼文後增加 3 個水滴。
-        */
-        const globalData = await getGlobalData();
-
-        const newWaterDrops =
-          (globalData.waterDrops || 0) + 3;
-
-        await updateGlobalData({
-          waterDrops: newWaterDrops,
-        });
       } catch (gardenError) {
-        console.error(
-          "更新花園成長失敗:",
-          gardenError,
-        );
+        console.error("更新花園成長失敗:", gardenError);
       }
 
       Keyboard.dismiss();
@@ -853,10 +725,7 @@ export default function ProfilePage() {
     } catch (error: any) {
       console.error("留言失敗:", error);
 
-      Alert.alert(
-        "留言失敗",
-        error?.message || "請稍後再試",
-      );
+      Alert.alert("留言失敗", error?.message || "請稍後再試");
     } finally {
       isSendingCommentRef.current = false;
       setIsSendingComment(false);
@@ -876,8 +745,7 @@ export default function ProfilePage() {
         where("fromDeviceId", "==", id),
       );
 
-      const repliesSnapshot =
-        await getDocs(repliesQuery);
+      const repliesSnapshot = await getDocs(repliesQuery);
 
       let sentPosts = 0;
       let sentComments = repliesSnapshot.size;
@@ -892,17 +760,14 @@ export default function ProfilePage() {
           ...(documentSnapshot.data() as any),
         };
 
-        const isMyPost =
-          post.authorId === id || post.deviceId === id;
+        const isMyPost = post.authorId === id || post.deviceId === id;
 
         if (isMyPost) {
           sentPosts += 1;
 
           fetchedMyPosts.push(post);
 
-          const comments = Array.isArray(post.comments)
-            ? post.comments
-            : [];
+          const comments = Array.isArray(post.comments) ? post.comments : [];
 
           comments.forEach((comment: any) => {
             if (comment.userId !== id) {
@@ -910,9 +775,7 @@ export default function ProfilePage() {
             }
           });
         } else {
-          const comments = Array.isArray(post.comments)
-            ? post.comments
-            : [];
+          const comments = Array.isArray(post.comments) ? post.comments : [];
 
           comments.forEach((comment: any) => {
             if (comment.userId === id) {
@@ -921,10 +784,7 @@ export default function ProfilePage() {
           });
         }
 
-        if (
-          Array.isArray(post.savedBy) &&
-          post.savedBy.includes(id)
-        ) {
+        if (Array.isArray(post.savedBy) && post.savedBy.includes(id)) {
           fetchedSavedPosts.push(post);
         }
       });
@@ -938,20 +798,17 @@ export default function ProfilePage() {
       setMyPosts(fetchedMyPosts);
       setFavoritePosts(fetchedSavedPosts);
 
-      setPostDays(
-        getPostDaysFromPosts(fetchedMyPosts),
-      );
+      setPostDays(getPostDaysFromPosts(fetchedMyPosts));
     } catch (error) {
       console.error("[Profile] Stats error:", error);
     }
   };
 
   const formatDayKey = (date: Date) =>
-    `${date.getFullYear()}-${String(
-      date.getMonth() + 1,
-    ).padStart(2, "0")}-${String(
-      date.getDate(),
-    ).padStart(2, "0")}`;
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+      2,
+      "0",
+    )}-${String(date.getDate()).padStart(2, "0")}`;
 
   const parsePostDate = (createdAt: any) => {
     if (!createdAt) {
@@ -970,10 +827,7 @@ export default function ProfilePage() {
       return post.imageUri;
     }
 
-    if (
-      post.media?.type === "photo" ||
-      post.media?.type === "image"
-    ) {
+    if (post.media?.type === "photo" || post.media?.type === "image") {
       return post.media.url;
     }
 
@@ -988,8 +842,7 @@ export default function ProfilePage() {
     const days: Record<string, boolean> = {};
 
     posts.forEach((post) => {
-      const createdAt =
-        parsePostDate(post.createdAt);
+      const createdAt = parsePostDate(post.createdAt);
 
       if (!createdAt) {
         return;
@@ -1020,10 +873,7 @@ export default function ProfilePage() {
       const week: Array<number | null> = [];
 
       for (let index = 0; index < 7; index += 1) {
-        if (
-          currentDay < 1 ||
-          currentDay > lastDay.getDate()
-        ) {
+        if (currentDay < 1 || currentDay > lastDay.getDate()) {
           week.push(null);
         } else {
           week.push(currentDay);
@@ -1045,28 +895,16 @@ export default function ProfilePage() {
 
     return myPosts
       .filter((post) => {
-        const createdAt =
-          parsePostDate(post.createdAt);
+        const createdAt = parsePostDate(post.createdAt);
 
-        return (
-          createdAt &&
-          formatDayKey(createdAt) ===
-            selectedCalendarDay
-        );
+        return createdAt && formatDayKey(createdAt) === selectedCalendarDay;
       })
       .sort((firstPost, secondPost) => {
-        const firstDate =
-          parsePostDate(firstPost.createdAt) ||
-          new Date(0);
+        const firstDate = parsePostDate(firstPost.createdAt) || new Date(0);
 
-        const secondDate =
-          parsePostDate(secondPost.createdAt) ||
-          new Date(0);
+        const secondDate = parsePostDate(secondPost.createdAt) || new Date(0);
 
-        return (
-          firstDate.getTime() -
-          secondDate.getTime()
-        );
+        return firstDate.getTime() - secondDate.getTime();
       });
   }, [selectedCalendarDay, myPosts]);
 
@@ -1078,13 +916,9 @@ export default function ProfilePage() {
 
       const updateData = async () => {
         try {
-          const profileReference = doc(
-            collection(db, "profiles"),
-            deviceId,
-          );
+          const profileReference = doc(collection(db, "profiles"), deviceId);
 
-          const profileSnapshot =
-            await getDoc(profileReference);
+          const profileSnapshot = await getDoc(profileReference);
 
           if (profileSnapshot.exists()) {
             const data = profileSnapshot.data();
@@ -1093,11 +927,9 @@ export default function ProfilePage() {
               setAvatar(data.avatarUrl);
             }
 
-            const localId =
-              await AsyncStorage.getItem("userId");
+            const localId = await AsyncStorage.getItem("userId");
 
-            const finalId =
-              data.userId || localId || deviceId;
+            const finalId = data.userId || localId || deviceId;
 
             setUserId(finalId);
             setTempId(finalId);
@@ -1124,32 +956,23 @@ export default function ProfilePage() {
       const response = await fetch(uri);
       const blob = await response.blob();
 
-      const filename =
-        `avatars/${deviceId}_${Date.now()}.jpg`;
+      const filename = `avatars/${deviceId}_${Date.now()}.jpg`;
 
-      const storageReference =
-        ref(storage, filename);
+      const storageReference = ref(storage, filename);
 
       await uploadBytes(storageReference, blob);
 
-      const url =
-        await getDownloadURL(storageReference);
+      const url = await getDownloadURL(storageReference);
 
       try {
-        const profileReference = doc(
-          collection(db, "profiles"),
-          deviceId,
-        );
+        const profileReference = doc(collection(db, "profiles"), deviceId);
 
-        const profileSnapshot =
-          await getDoc(profileReference);
+        const profileSnapshot = await getDoc(profileReference);
 
         if (profileSnapshot.exists()) {
           const data = profileSnapshot.data();
 
-          if (
-            data.pendingFertilizers === undefined
-          ) {
+          if (data.pendingFertilizers === undefined) {
             await setDoc(
               profileReference,
               {
@@ -1172,10 +995,7 @@ export default function ProfilePage() {
           );
         }
       } catch (error) {
-        console.error(
-          "初始化 pendingFertilizers 失敗:",
-          error,
-        );
+        console.error("初始化 pendingFertilizers 失敗:", error);
       }
 
       await setDoc(
@@ -1203,13 +1023,12 @@ export default function ProfilePage() {
       {
         text: "相簿",
         onPress: async () => {
-          const result =
-            await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ["images"],
-              allowsEditing: true,
-              aspect: [1, 1],
-              quality: 0.5,
-            });
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.5,
+          });
 
           if (!result.canceled) {
             uploadAvatar(result.assets[0].uri);
@@ -1236,20 +1055,14 @@ export default function ProfilePage() {
 
       if (deviceId) {
         try {
-          const profileReference = doc(
-            collection(db, "profiles"),
-            deviceId,
-          );
+          const profileReference = doc(collection(db, "profiles"), deviceId);
 
-          const profileSnapshot =
-            await getDoc(profileReference);
+          const profileSnapshot = await getDoc(profileReference);
 
           if (profileSnapshot.exists()) {
             const data = profileSnapshot.data();
 
-            if (
-              data.pendingFertilizers === undefined
-            ) {
+            if (data.pendingFertilizers === undefined) {
               await setDoc(
                 profileReference,
                 {
@@ -1272,10 +1085,7 @@ export default function ProfilePage() {
             );
           }
         } catch (error) {
-          console.error(
-            "初始化 pendingFertilizers 失敗:",
-            error,
-          );
+          console.error("初始化 pendingFertilizers 失敗:", error);
         }
 
         await setDoc(
@@ -1309,19 +1119,15 @@ export default function ProfilePage() {
     setDetailVisible(true);
   };
 
-  const sectionUnderlineTranslateX =
-    sectionUnderlineAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, sectionTabsWidth / 2],
-    });
+  const sectionUnderlineTranslateX = sectionUnderlineAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, sectionTabsWidth / 2],
+  });
 
   if (loading) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator
-          size="large"
-          color="#4630EB"
-        />
+        <ActivityIndicator size="large" color="#4630EB" />
       </View>
     );
   }
@@ -1349,11 +1155,7 @@ export default function ProfilePage() {
             style={styles.avatarEditIcon}
             onPress={handleEditAvatar}
           >
-            <MaterialIcons
-              name="edit"
-              size={14}
-              color="#666666"
-            />
+            <MaterialIcons name="edit" size={14} color="#666666" />
           </TouchableOpacity>
         </View>
 
@@ -1371,9 +1173,7 @@ export default function ProfilePage() {
                 autoFocus
               />
             ) : (
-              <Text style={styles.nameText}>
-                {userId}
-              </Text>
+              <Text style={styles.nameText}>{userId}</Text>
             )}
           </View>
 
@@ -1381,11 +1181,7 @@ export default function ProfilePage() {
             style={styles.editButton}
             onPress={() => setEditingId(true)}
           >
-            <MaterialIcons
-              name="edit"
-              size={18}
-              color="#999999"
-            />
+            <MaterialIcons name="edit" size={18} color="#999999" />
           </TouchableOpacity>
         </View>
 
@@ -1401,28 +1197,21 @@ export default function ProfilePage() {
                   {
                     transform: [
                       {
-                        translateY:
-                          sentPostsSlideAnim,
+                        translateY: sentPostsSlideAnim,
                       },
                     ],
                   },
                 ]}
               >
-                <Text style={styles.statValue}>
-                  {prevStats.sentPosts}
-                </Text>
+                <Text style={styles.statValue}>{prevStats.sentPosts}</Text>
 
-                <Text style={styles.statValue}>
-                  {stats.sentPosts}
-                </Text>
+                <Text style={styles.statValue}>{stats.sentPosts}</Text>
               </Animated.View>
             </View>
           </View>
 
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>
-              給出回覆
-            </Text>
+            <Text style={styles.statLabel}>給出回覆</Text>
 
             <View style={styles.statValueContainer}>
               <Animated.View
@@ -1431,28 +1220,21 @@ export default function ProfilePage() {
                   {
                     transform: [
                       {
-                        translateY:
-                          sentCommentsSlideAnim,
+                        translateY: sentCommentsSlideAnim,
                       },
                     ],
                   },
                 ]}
               >
-                <Text style={styles.statValue}>
-                  {prevStats.sentComments}
-                </Text>
+                <Text style={styles.statValue}>{prevStats.sentComments}</Text>
 
-                <Text style={styles.statValue}>
-                  {stats.sentComments}
-                </Text>
+                <Text style={styles.statValue}>{stats.sentComments}</Text>
               </Animated.View>
             </View>
           </View>
 
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>
-              收到回覆
-            </Text>
+            <Text style={styles.statLabel}>收到回覆</Text>
 
             <View style={styles.statValueContainer}>
               <Animated.View
@@ -1461,8 +1243,7 @@ export default function ProfilePage() {
                   {
                     transform: [
                       {
-                        translateY:
-                          receivedCommentsSlideAnim,
+                        translateY: receivedCommentsSlideAnim,
                       },
                     ],
                   },
@@ -1472,9 +1253,7 @@ export default function ProfilePage() {
                   {prevStats.receivedComments}
                 </Text>
 
-                <Text style={styles.statValue}>
-                  {stats.receivedComments}
-                </Text>
+                <Text style={styles.statValue}>{stats.receivedComments}</Text>
               </Animated.View>
             </View>
           </View>
@@ -1484,9 +1263,7 @@ export default function ProfilePage() {
         <View
           style={styles.sectionTabs}
           onLayout={(event) => {
-            setSectionTabsWidth(
-              event.nativeEvent.layout.width,
-            );
+            setSectionTabsWidth(event.nativeEvent.layout.width);
           }}
         >
           <TouchableOpacity
@@ -1499,8 +1276,7 @@ export default function ProfilePage() {
             <Text
               style={[
                 styles.sectionTabText,
-                activeSection === "posts" &&
-                  styles.sectionTabTextActive,
+                activeSection === "posts" && styles.sectionTabTextActive,
               ]}
             >
               貼文頁
@@ -1517,8 +1293,7 @@ export default function ProfilePage() {
             <Text
               style={[
                 styles.sectionTabText,
-                activeSection === "favorites" &&
-                  styles.sectionTabTextActive,
+                activeSection === "favorites" && styles.sectionTabTextActive,
               ]}
             >
               收藏頁
@@ -1534,8 +1309,7 @@ export default function ProfilePage() {
                   width: sectionTabsWidth / 2,
                   transform: [
                     {
-                      translateX:
-                        sectionUnderlineTranslateX,
+                      translateX: sectionUnderlineTranslateX,
                     },
                   ],
                 },
@@ -1550,8 +1324,7 @@ export default function ProfilePage() {
               <TouchableOpacity
                 style={[
                   styles.viewTab,
-                  postViewMode === "time" &&
-                    styles.viewTabActive,
+                  postViewMode === "time" && styles.viewTabActive,
                 ]}
                 onPress={() => {
                   setPostViewMode("time");
@@ -1560,8 +1333,7 @@ export default function ProfilePage() {
                 <Text
                   style={[
                     styles.viewTabText,
-                    postViewMode === "time" &&
-                      styles.viewTabTextActive,
+                    postViewMode === "time" && styles.viewTabTextActive,
                   ]}
                 >
                   時間順序
@@ -1571,8 +1343,7 @@ export default function ProfilePage() {
               <TouchableOpacity
                 style={[
                   styles.viewTab,
-                  postViewMode === "calendar" &&
-                    styles.viewTabActive,
+                  postViewMode === "calendar" && styles.viewTabActive,
                 ]}
                 onPress={() => {
                   setPostViewMode("calendar");
@@ -1581,8 +1352,7 @@ export default function ProfilePage() {
                 <Text
                   style={[
                     styles.viewTabText,
-                    postViewMode === "calendar" &&
-                      styles.viewTabTextActive,
+                    postViewMode === "calendar" && styles.viewTabTextActive,
                   ]}
                 >
                   月曆
@@ -1593,27 +1363,18 @@ export default function ProfilePage() {
             {postViewMode === "time" ? (
               <View style={styles.listCard}>
                 {myPosts.length === 0 ? (
-                  <Text style={styles.emptyText}>
-                    目前沒有貼文
-                  </Text>
+                  <Text style={styles.emptyText}>目前沒有貼文</Text>
                 ) : (
                   myPosts
                     .slice()
                     .sort((firstPost, secondPost) => {
                       const firstDate =
-                        parsePostDate(
-                          firstPost.createdAt,
-                        ) || new Date(0);
+                        parsePostDate(firstPost.createdAt) || new Date(0);
 
                       const secondDate =
-                        parsePostDate(
-                          secondPost.createdAt,
-                        ) || new Date(0);
+                        parsePostDate(secondPost.createdAt) || new Date(0);
 
-                      return (
-                        secondDate.getTime() -
-                        firstDate.getTime()
-                      );
+                      return secondDate.getTime() - firstDate.getTime();
                     })
                     .map((post) => (
                       <TouchableOpacity
@@ -1635,17 +1396,10 @@ export default function ProfilePage() {
                             style={styles.postRowAvatar}
                           />
 
-                          <View
-                            style={styles.postRowAuthorInfo}
-                          >
-                            <Text
-                              style={styles.postRowName}
-                              numberOfLines={1}
-                            >
-                              {profileMap[
-                                post.authorId ||
-                                  post.deviceId
-                              ]?.name ||
+                          <View style={styles.postRowAuthorInfo}>
+                            <Text style={styles.postRowName} numberOfLines={1}>
+                              {profileMap[post.authorId || post.deviceId]
+                                ?.name ||
                                 post.authorName ||
                                 post.userId ||
                                 userId}
@@ -1654,7 +1408,9 @@ export default function ProfilePage() {
                             <View style={styles.postRowMetaRow}>
                               <Text style={styles.postRowDate}>
                                 {parsePostDate(post.createdAt)
-                                  ? parsePostDate(post.createdAt).toLocaleDateString("zh-TW", {
+                                  ? parsePostDate(
+                                      post.createdAt,
+                                    ).toLocaleDateString("zh-TW", {
                                       year: "numeric",
                                       month: "2-digit",
                                       day: "2-digit",
@@ -1664,16 +1420,17 @@ export default function ProfilePage() {
                             </View>
                           </View>
                         </View>
-                        {((post.tags && post.tags.length > 0) || post.tag) ? (
+                        {(post.tags && post.tags.length > 0) || post.tag ? (
                           <View style={styles.postRowTagBadge}>
-                            <Text style={styles.postRowTagText} numberOfLines={1}>
+                            <Text
+                              style={styles.postRowTagText}
+                              numberOfLines={1}
+                            >
                               #{post.tags?.[0] || post.tag}
                             </Text>
                           </View>
                         ) : null}
-                        <View
-                          style={styles.postRowContentRow}
-                        >
+                        <View style={styles.postRowContentRow}>
                           <Text
                             style={[
                               styles.postRowContent,
@@ -1681,21 +1438,15 @@ export default function ProfilePage() {
                             ]}
                             numberOfLines={1}
                           >
-                            {post.content ||
-                              post.text ||
-                              "(無內容)"}
+                            {post.content || post.text || "(無內容)"}
                           </Text>
 
                           {getPostThumbnailUrl(post) ? (
                             <Image
                               source={{
-                                uri: getPostThumbnailUrl(
-                                  post,
-                                ),
+                                uri: getPostThumbnailUrl(post),
                               }}
-                              style={
-                                styles.postRowThumbnail
-                              }
+                              style={styles.postRowThumbnail}
                             />
                           ) : null}
                         </View>
@@ -1708,18 +1459,14 @@ export default function ProfilePage() {
         ) : (
           <View style={styles.listCard}>
             {favoritePosts.length === 0 ? (
-              <Text style={styles.emptyText}>
-                目前沒有收藏貼文
-              </Text>
+              <Text style={styles.emptyText}>目前沒有收藏貼文</Text>
             ) : (
               favoritePosts
                 .slice()
                 .sort((a, b) => {
-                  const aDate =
-                    parsePostDate(a.createdAt) || new Date(0);
+                  const aDate = parsePostDate(a.createdAt) || new Date(0);
 
-                  const bDate =
-                    parsePostDate(b.createdAt) || new Date(0);
+                  const bDate = parsePostDate(b.createdAt) || new Date(0);
 
                   return bDate.getTime() - aDate.getTime();
                 })
@@ -1744,13 +1491,8 @@ export default function ProfilePage() {
                       />
 
                       <View style={styles.postRowAuthorInfo}>
-                        <Text
-                          style={styles.postRowName}
-                          numberOfLines={1}
-                        >
-                          {profileMap[
-                            post.authorId || post.deviceId
-                          ]?.name ||
+                        <Text style={styles.postRowName} numberOfLines={1}>
+                          {profileMap[post.authorId || post.deviceId]?.name ||
                             post.authorName ||
                             post.userId ||
                             userId}
@@ -1758,26 +1500,23 @@ export default function ProfilePage() {
 
                         <Text style={styles.postRowDate}>
                           {parsePostDate(post.createdAt)
-                            ? parsePostDate(
-                                post.createdAt,
-                              ).toLocaleDateString("zh-TW", {
-                                year: "numeric",
-                                month: "2-digit",
-                                day: "2-digit",
-                              })
+                            ? parsePostDate(post.createdAt).toLocaleDateString(
+                                "zh-TW",
+                                {
+                                  year: "numeric",
+                                  month: "2-digit",
+                                  day: "2-digit",
+                                },
+                              )
                             : "未知時間"}
                         </Text>
                       </View>
                     </View>
 
                     {/* 標籤移到頭貼區塊下方 */}
-                    {((post.tags && post.tags.length > 0) ||
-                      post.tag) ? (
+                    {(post.tags && post.tags.length > 0) || post.tag ? (
                       <View style={styles.postRowTagBadge}>
-                        <Text
-                          style={styles.postRowTagText}
-                          numberOfLines={1}
-                        >
+                        <Text style={styles.postRowTagText} numberOfLines={1}>
                           #{post.tags?.[0] || post.tag}
                         </Text>
                       </View>
@@ -1792,9 +1531,7 @@ export default function ProfilePage() {
                         ]}
                         numberOfLines={1}
                       >
-                        {post.content ||
-                          post.text ||
-                          "(無內容)"}
+                        {post.content || post.text || "(無內容)"}
                       </Text>
 
                       {getPostThumbnailUrl(post) ? (
@@ -1813,8 +1550,7 @@ export default function ProfilePage() {
         )}
 
         {/* 月曆 */}
-        {activeSection === "posts" &&
-        postViewMode === "calendar" ? (
+        {activeSection === "posts" && postViewMode === "calendar" ? (
           <View style={styles.calendarCard}>
             <View style={styles.calendarHeader}>
               <TouchableOpacity
@@ -1831,21 +1567,14 @@ export default function ProfilePage() {
                   setSelectedCalendarDay(null);
                 }}
               >
-                <MaterialIcons
-                  name="chevron-left"
-                  size={24}
-                  color="#333333"
-                />
+                <MaterialIcons name="chevron-left" size={24} color="#333333" />
               </TouchableOpacity>
 
               <Text style={styles.calendarTitle}>
-                {calendarMonth.toLocaleDateString(
-                  "zh-TW",
-                  {
-                    year: "numeric",
-                    month: "long",
-                  },
-                )}
+                {calendarMonth.toLocaleDateString("zh-TW", {
+                  year: "numeric",
+                  month: "long",
+                })}
               </Text>
 
               <TouchableOpacity
@@ -1862,128 +1591,92 @@ export default function ProfilePage() {
                   setSelectedCalendarDay(null);
                 }}
               >
-                <MaterialIcons
-                  name="chevron-right"
-                  size={24}
-                  color="#333333"
-                />
+                <MaterialIcons name="chevron-right" size={24} color="#333333" />
               </TouchableOpacity>
             </View>
 
             <View style={styles.weekdayRow}>
-              {[
-                "日",
-                "一",
-                "二",
-                "三",
-                "四",
-                "五",
-                "六",
-              ].map((label) => (
-                <Text
-                  key={label}
-                  style={styles.weekdayText}
-                >
+              {["日", "一", "二", "三", "四", "五", "六"].map((label) => (
+                <Text key={label} style={styles.weekdayText}>
                   {label}
                 </Text>
               ))}
             </View>
 
-            {getMonthMatrix(calendarMonth).map(
-              (week, weekIndex) => (
-                <View
-                  key={`week-${weekIndex}`}
-                  style={styles.weekRow}
-                >
-                  {week.map((day, dayIndex) => {
-                    const dayKey =
-                      day !== null
-                        ? formatDayKey(
-                            new Date(
-                              calendarMonth.getFullYear(),
-                              calendarMonth.getMonth(),
-                              day,
-                            ),
-                          )
-                        : "";
+            {getMonthMatrix(calendarMonth).map((week, weekIndex) => (
+              <View key={`week-${weekIndex}`} style={styles.weekRow}>
+                {week.map((day, dayIndex) => {
+                  const dayKey =
+                    day !== null
+                      ? formatDayKey(
+                          new Date(
+                            calendarMonth.getFullYear(),
+                            calendarMonth.getMonth(),
+                            day,
+                          ),
+                        )
+                      : "";
 
-                    const hasPost =
-                      day !== null &&
-                      !!postDays[dayKey];
+                  const hasPost = day !== null && !!postDays[dayKey];
 
-                    const today =
-                      day !== null &&
-                      day === new Date().getDate() &&
-                      calendarMonth.getMonth() ===
-                        new Date().getMonth() &&
-                      calendarMonth.getFullYear() ===
-                        new Date().getFullYear();
+                  const today =
+                    day !== null &&
+                    day === new Date().getDate() &&
+                    calendarMonth.getMonth() === new Date().getMonth() &&
+                    calendarMonth.getFullYear() === new Date().getFullYear();
 
-                    const isSelected =
-                      hasPost &&
-                      dayKey === selectedCalendarDay;
+                  const isSelected = hasPost && dayKey === selectedCalendarDay;
 
-                    return (
-                      <View
-                        key={`day-${dayIndex}`}
-                        style={styles.dayCell}
-                      >
-                        {day !== null ? (
-                          <TouchableOpacity
-                            style={styles.dayInner}
-                            disabled={!hasPost}
-                            onPress={() => {
-                              if (!hasPost) {
-                                return;
-                              }
+                  return (
+                    <View key={`day-${dayIndex}`} style={styles.dayCell}>
+                      {day !== null ? (
+                        <TouchableOpacity
+                          style={styles.dayInner}
+                          disabled={!hasPost}
+                          onPress={() => {
+                            if (!hasPost) {
+                              return;
+                            }
 
-                              setSelectedCalendarDay(
-                                dayKey,
-                              );
-                            }}
+                            setSelectedCalendarDay(dayKey);
+                          }}
+                        >
+                          {hasPost ? (
+                            <Image
+                              source={require("../../assets/day flower.png")}
+                              style={styles.moodIcon}
+                            />
+                          ) : null}
+
+                          <View
+                            style={[
+                              styles.dayTextWrapper,
+                              isSelected && styles.selectedDayWrapper,
+                            ]}
                           >
-                            {hasPost ? (
-                              <Image
-                                source={require("../../assets/day flower.png")}
-                                style={styles.moodIcon}
-                              />
-                            ) : null}
-
-                            <View
+                            <Text
                               style={[
-                                styles.dayTextWrapper,
-                                isSelected &&
-                                  styles.selectedDayWrapper,
+                                styles.dayText,
+                                today && styles.todayDayText,
+                                hasPost && styles.dayTextWithPost,
                               ]}
                             >
-                              <Text
-                                style={[
-                                  styles.dayText,
-                                  today &&
-                                    styles.todayDayText,
-                                  hasPost &&
-                                    styles.dayTextWithPost,
-                                ]}
-                              >
-                                {day}
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-                        ) : (
-                          <View style={styles.emptyDay} />
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              ),
-            )}
+                              {day}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.emptyDay} />
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
 
             {selectedCalendarDay ? (
               <View style={styles.selectedDayPosts}>
-                <Text
-                  style={styles.selectedDayPostsTitle}
-                >
+                <Text style={styles.selectedDayPostsTitle}>
                   {new Date(
                     `${selectedCalendarDay}T00:00:00`,
                   ).toLocaleDateString("zh-TW", {
@@ -1995,9 +1688,7 @@ export default function ProfilePage() {
                 </Text>
 
                 {selectedCalendarDayPosts.length === 0 ? (
-                  <Text style={styles.emptyText}>
-                    該日尚無貼文
-                  </Text>
+                  <Text style={styles.emptyText}>該日尚無貼文</Text>
                 ) : (
                   selectedCalendarDayPosts.map((post) => (
                     <TouchableOpacity
@@ -2020,31 +1711,17 @@ export default function ProfilePage() {
                         />
                       </View>
 
-                      <View
-                        style={styles.calendarPostContent}
-                      >
-                        <View
-                          style={styles.calendarPostHeader}
-                        >
+                      <View style={styles.calendarPostContent}>
+                        <View style={styles.calendarPostHeader}>
                           <Text
-                            style={
-                              styles.calendarPostUserName
-                            }
+                            style={styles.calendarPostUserName}
                             numberOfLines={1}
                           >
-                            {post.authorName ||
-                              post.userId ||
-                              userId}
+                            {post.authorName || post.userId || userId}
                           </Text>
 
-                          <Text
-                            style={
-                              styles.calendarPostDate
-                            }
-                          >
-                            {parsePostDate(
-                              post.createdAt,
-                            )?.toLocaleTimeString(
+                          <Text style={styles.calendarPostDate}>
+                            {parsePostDate(post.createdAt)?.toLocaleTimeString(
                               "zh-TW",
                               {
                                 hour: "2-digit",
@@ -2054,18 +1731,12 @@ export default function ProfilePage() {
                           </Text>
                         </View>
 
-                        {((post.tags &&
-                          post.tags.length > 0) ||
-                          post.tag) ? (
+                        {(post.tags && post.tags.length > 0) || post.tag ? (
                           <Text
-                            style={
-                              styles.calendarPostTag
-                            }
+                            style={styles.calendarPostTag}
                             numberOfLines={1}
                           >
-                            #
-                            {post.tags?.[0] ||
-                              post.tag}
+                            #{post.tags?.[0] || post.tag}
                           </Text>
                         ) : null}
 
@@ -2076,22 +1747,16 @@ export default function ProfilePage() {
                           ]}
                           numberOfLines={1}
                         >
-                          {post.content ||
-                            post.text ||
-                            "(無內容)"}
+                          {post.content || post.text || "(無內容)"}
                         </Text>
                       </View>
 
                       {getPostThumbnailUrl(post) ? (
                         <Image
                           source={{
-                            uri: getPostThumbnailUrl(
-                              post,
-                            ),
+                            uri: getPostThumbnailUrl(post),
                           }}
-                          style={
-                            styles.calendarPostThumbnail
-                          }
+                          style={styles.calendarPostThumbnail}
                         />
                       ) : null}
                     </TouchableOpacity>
@@ -2129,11 +1794,7 @@ export default function ProfilePage() {
         renderCommentInput={() => (
           <>
             {commentImage ? (
-              <View
-                style={
-                  styles.commentImagePreviewContainer
-                }
-              >
+              <View style={styles.commentImagePreviewContainer}>
                 <Image
                   source={{ uri: commentImage }}
                   style={styles.commentImagePreview}
@@ -2149,25 +1810,18 @@ export default function ProfilePage() {
                   <Ionicons
                     name="close-circle"
                     size={24}
-                    color={
-                      isSendingComment
-                        ? "#bbbbbb"
-                        : "#E07A7A"
-                    }
+                    color={isSendingComment ? "#bbbbbb" : "#E07A7A"}
                   />
                 </TouchableOpacity>
               </View>
             ) : null}
 
             <View style={styles.commentInputBar}>
-              <View
-                style={styles.commentInputActions}
-              >
+              <View style={styles.commentInputActions}>
                 <TouchableOpacity
                   style={[
                     styles.commentActionBtn,
-                    isSendingComment &&
-                      styles.commentActionBtnDisabled,
+                    isSendingComment && styles.commentActionBtnDisabled,
                   ]}
                   onPress={takeCommentPhoto}
                   disabled={isSendingComment}
@@ -2175,19 +1829,14 @@ export default function ProfilePage() {
                   <Ionicons
                     name="camera"
                     size={20}
-                    color={
-                      isSendingComment
-                        ? "#bbbbbb"
-                        : "#B1D497"
-                    }
+                    color={isSendingComment ? "#bbbbbb" : "#B1D497"}
                   />
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[
                     styles.commentActionBtn,
-                    isSendingComment &&
-                      styles.commentActionBtnDisabled,
+                    isSendingComment && styles.commentActionBtnDisabled,
                   ]}
                   onPress={pickCommentPhoto}
                   disabled={isSendingComment}
@@ -2195,11 +1844,7 @@ export default function ProfilePage() {
                   <Ionicons
                     name="image"
                     size={20}
-                    color={
-                      isSendingComment
-                        ? "#bbbbbb"
-                        : "#B1D497"
-                    }
+                    color={isSendingComment ? "#bbbbbb" : "#B1D497"}
                   />
                 </TouchableOpacity>
               </View>
@@ -2207,13 +1852,10 @@ export default function ProfilePage() {
               <TextInput
                 style={[
                   styles.commentInputInPage,
-                  isSendingComment &&
-                    styles.commentInputDisabled,
+                  isSendingComment && styles.commentInputDisabled,
                 ]}
                 placeholder={
-                  isSendingComment
-                    ? "留言發送中..."
-                    : "輸入你的留言..."
+                  isSendingComment ? "留言發送中..." : "輸入你的留言..."
                 }
                 placeholderTextColor="#aaaaaa"
                 value={commentText}
@@ -2224,23 +1866,15 @@ export default function ProfilePage() {
               <TouchableOpacity
                 style={[
                   styles.sendCommentBtn,
-                  isSendingComment &&
-                    styles.sendCommentBtnDisabled,
+                  isSendingComment && styles.sendCommentBtnDisabled,
                 ]}
                 onPress={handleAddComment}
                 disabled={isSendingComment}
               >
                 {isSendingComment ? (
-                  <ActivityIndicator
-                    size="small"
-                    color="#ffffff"
-                  />
+                  <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Ionicons
-                    name="send"
-                    size={20}
-                    color="#ffffff"
-                  />
+                  <Ionicons name="send" size={20} color="#ffffff" />
                 )}
               </TouchableOpacity>
             </View>

@@ -873,15 +873,30 @@ export default function GardenScreen() {
           return;
         }
 
-        const scaleFactor =
+        const scaleFactor=
           distance / Math.max(1, pinchDistanceRef.current || distance);
-        const nextScale = pinchStartScaleRef.current * scaleFactor;
-        applyCamera(
-          scenePanXRef.current,
-          scenePanYRef.current,
-          nextScale,
-          plantCount,
-        );
+        const nextScaleRaw = pinchStartScaleRef.current * scaleFactor;
+        const minScale = getMinCameraScale();
+        const nextScale = Math.max(minScale, Math.min(nextScaleRaw, MAX_CAMERA_SCALE));
+
+        // 如果新的尺度被夾到與目前一樣（已達到極限），不要改變相機位置，避免達邊界時位移
+        if (Math.abs(nextScale - (cameraScaleRef.current || 1)) < 1e-6) {
+          return;
+        }
+
+        // 計算以視窗中心為縮放中心
+        const viewportWidth = Math.max(1, gardenAreaLayout.width || width);
+        const viewportHeight = Math.max(1, gardenAreaLayout.height || height);
+        const viewportCenter = { x: viewportWidth / 2, y: viewportHeight / 2 };
+
+        const currentScale = cameraScaleRef.current || 1;
+        const worldFocusX = (viewportCenter.x - scenePanXRef.current) / currentScale;
+        const worldFocusY = (viewportCenter.y - scenePanYRef.current) / currentScale;
+
+        const nextPanX = viewportCenter.x - worldFocusX * nextScale;
+        const nextPanY = viewportCenter.y - worldFocusY * nextScale;
+
+        applyCamera(nextPanX, nextPanY, nextScale, plantCount);
         return;
       }
 
