@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import {
   useCallback,
@@ -126,6 +126,7 @@ const getDefaultWorldPosition = (
 };
 
 export default function GardenScreen() {
+  const router = useRouter();
   const [garden, setGarden] = useState<{ seeds: number; plants: any[] } | null>(
     null,
   );
@@ -346,8 +347,8 @@ export default function GardenScreen() {
     const left = (PLANT_SIZE - width) / 2;
     const dragTouchLift = 13;
     const top = isSeedStage
-      ? PLANT_SIZE - height + 25 - dragTouchLift
-      : PLANT_SIZE - TOUCH_BASE_BOTTOM_OFFSET - height - 10 - dragTouchLift;
+      ? PLANT_SIZE - height + 13 - dragTouchLift
+      : PLANT_SIZE - TOUCH_BASE_BOTTOM_OFFSET - height + 25 - dragTouchLift;
     const out = {
       width,
       height,
@@ -358,11 +359,11 @@ export default function GardenScreen() {
     // 預設每階段的 top 偏移（單位 px）
     // 發芽(1): -10, 幼苗(2): -5, 小草(3): +3, 小花(4): +8, 花(5): +20
     const STAGE_DEFAULT_TOP_OFFSETS: Record<number, number> = {
-      1: -10,
+      1: -1,
       2: -3,
-      3: 5,
-      4: 15,
-      5: 28,
+      3: -4,
+      4: -4,
+      5: -1,
     };
 
     // 支援 per-plant 覆寫：
@@ -1033,7 +1034,7 @@ export default function GardenScreen() {
 
       return {
         x: pos.x + touchLeft + touchWidth / 2,
-        y: pos.y + touchTop + touchHeight / 2,
+        y: pos.y + touchTop + touchHeight,
       };
     },
     [draftPlantPositions],
@@ -1184,7 +1185,7 @@ export default function GardenScreen() {
 
           resolve({
             x: x + w / 2,
-            y: y + h / 2,
+            y: y + h,
           });
         },
       );
@@ -1551,34 +1552,48 @@ export default function GardenScreen() {
           <MaterialCommunityIcons name="flower" size={24} color="#4CAF50" />
           <Text style={styles.seedCountText}>{sortedPlants.length}</Text>
         </View>
-        <Text style={styles.title}>花園</Text>
-        <TouchableOpacity
-          style={{ width: 40 }}
-          onPress={() => {
-            Alert.alert("清除所有植物", "確定要刪除花園中的所有植物嗎？", [
-              { text: "取消", style: "cancel" },
-              {
-                text: "確認刪除",
-                style: "destructive",
-                onPress: async () => {
-                  try {
-                    await clearAllPlants();
-                    await loadGarden();
-                    Alert.alert("成功", "已清除所有植物");
-                  } catch (e) {
-                    Alert.alert("錯誤", "清除失敗");
-                  }
+        <View style={styles.topBarActions}>
+          <TouchableOpacity
+            style={styles.topBarActionButton}
+            onPress={() => router.push("/encyclopedia" as never)}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="book-open-variant"
+              size={22}
+              color="#6D4C41"
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.topBarActionButton}
+            onPress={() => {
+              Alert.alert("清除所有植物", "確定要刪除花園中的所有植物嗎？", [
+                { text: "取消", style: "cancel" },
+                {
+                  text: "確認刪除",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      await clearAllPlants();
+                      await loadGarden();
+                      Alert.alert("成功", "已清除所有植物");
+                    } catch (e) {
+                      Alert.alert("錯誤", "清除失敗");
+                    }
+                  },
                 },
-              },
-            ]);
-          }}
-        >
-          <MaterialCommunityIcons
-            name="trash-can-outline"
-            size={24}
-            color="#e53935"
-          />
-        </TouchableOpacity>
+              ]);
+            }}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="trash-can-outline"
+              size={22}
+              color="#e53935"
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View
@@ -2035,7 +2050,7 @@ export default function GardenScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "#eeeeee",
   },
   sceneViewport: {
     left: 0,
@@ -2055,15 +2070,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 14,
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    backgroundColor: "#eeeeee",
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
     zIndex: 1000,
   },
+  topBarActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  topBarActionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    marginLeft: 10,
+  },
   seedCounter: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#E8F5E9",
+    backgroundColor: "#eeeeee",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -2128,8 +2156,9 @@ const styles = StyleSheet.create({
     top: (PLANT_SIZE - 30) / 2 + 30,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "transparent",
-    borderWidth: 0,
+    backgroundColor: "rgba(0, 180, 255, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 180, 255, 0.7)",
     borderRadius: 8,
   },
   dragTouchArea: {
@@ -2140,8 +2169,9 @@ const styles = StyleSheet.create({
     top: (PLANT_SIZE - 30) / 2 + 30,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "transparent",
-    borderWidth: 0,
+    backgroundColor: "rgba(255, 120, 0, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 120, 0, 0.7)",
     borderRadius: 8,
   },
   draggablePlant: {

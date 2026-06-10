@@ -273,9 +273,9 @@ export const createPlantForPost = async (seedType, postId) => {
 
   // 為各個植物類型映射合適的名稱
   const typeNameMap = {
-    eat1: "橘子",
+    eat1: "番茄",
     eat2: "草莓",
-    mood1: "雛菊",
+    mood1: "黃色雛菊",
     mood2: "薰衣草",
     love1: "鬱金香",
     love2: "康乃馨",
@@ -283,8 +283,8 @@ export const createPlantForPost = async (seedType, postId) => {
     sport2: "仙人掌",
     entertainment1: "七彩花",
     entertainment2: "水仙花",
-    pet1: "寵物花 1",
-    pet2: "寵物花 2",
+    pet1: "白色雛菊",
+    pet2: "四頁草",
   };
 
   let name = typeNameMap[seedType] || seedType;

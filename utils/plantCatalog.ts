@@ -148,3 +148,78 @@ export const getFallbackEmoji = (plant: any) => {
   if ((plant.repliesCount || 0) < 5) return "🌿";
   return "🌸";
 };
+
+export const PLANT_CATALOG = [
+  {
+    type: "eat1",
+    name: "番茄",
+    bloomImage: require("../assets/plant/eat1/eat1-5.png"),
+    silhouetteImage: require("../assets/plant/eat1/silhouette.png"),
+  },
+  {
+    type: "eat2",
+    name: "草莓",
+    bloomImage: require("../assets/plant/eat2/eat2-5.png"),
+    silhouetteImage: require("../assets/plant/eat2/silhouette.png"),
+  },
+  {
+    type: "mood1",
+    name: "黃色雛菊",
+    bloomImage: require("../assets/plant/mood1/mood1-5.png"),
+    silhouetteImage: require("../assets/plant/mood1/silhouette.png"),
+  },
+  {
+    type: "mood2",
+    name: "薰衣草",
+    bloomImage: require("../assets/plant/mood2/mood2-5.png"),
+    silhouetteImage: require("../assets/plant/mood2/silhouette.png"),
+  },
+  {
+    type: "love1",
+    name: "鬱金香",
+    bloomImage: require("../assets/plant/love1/love1-5.png"),
+    silhouetteImage: require("../assets/plant/love1/silhouette.png"),
+  },
+  {
+    type: "love2",
+    name: "康乃馨",
+    bloomImage: require("../assets/plant/love2/love2-5.png"),
+    silhouetteImage: require("../assets/plant/love2/silhouette.png"),
+  },
+  {
+    type: "sport1",
+    name: "向日葵",
+    bloomImage: require("../assets/plant/sport1/sport1-5.png"),
+    silhouetteImage: require("../assets/plant/sport1/silhouette.png"),
+  },
+  {
+    type: "sport2",
+    name: "仙人掌",
+    bloomImage: require("../assets/plant/sport2/sport2-5.png"),
+    silhouetteImage: require("../assets/plant/sport2/silhouette.png"),
+  },
+  {
+    type: "entertainment1",
+    name: "七彩花",
+    bloomImage: require("../assets/plant/entertainment1/entertainment1-5.png"),
+    silhouetteImage: require("../assets/plant/entertainment1/silhouette.png"),
+  },
+  {
+    type: "entertainment2",
+    name: "水仙花",
+    bloomImage: require("../assets/plant/entertainment2/entertainment2-5.png"),
+    silhouetteImage: require("../assets/plant/entertainment2/silhouette.png"),
+  },
+  {
+    type: "pet1",
+    name: "白色雛菊",
+    bloomImage: require("../assets/plant/pet1/pet1-5.png"),
+    silhouetteImage: require("../assets/plant/pet1/silhouette.png"),
+  },
+  {
+    type: "pet2",
+    name: "四葉草",
+    bloomImage: require("../assets/plant/pet2/pet2-5.png"),
+    silhouetteImage: require("../assets/plant/pet2/silhouette.png"),
+  },
+] as const;
