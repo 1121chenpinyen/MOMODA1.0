@@ -20,6 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useColorScheme } from "./useColorScheme";
 
 interface Comment {
   id?: string;
@@ -37,6 +38,7 @@ interface PostDetailModalProps {
   visible: boolean;
   post: any;
   onClose: () => void;
+  isDark?: boolean;
   waterDropToastVisible?: boolean;
 
   // 從通知頁進入時，用來定位特定留言
@@ -66,9 +68,7 @@ function formatTime(createdAt: any) {
     return "剛剛";
   }
 
-  const date = createdAt?.toDate
-    ? createdAt.toDate()
-    : new Date(createdAt);
+  const date = createdAt?.toDate ? createdAt.toDate() : new Date(createdAt);
 
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -114,10 +114,7 @@ function areSameComment(firstComment: any, secondComment: any) {
     return true;
   }
 
-  if (
-    typeof firstComment === "string" ||
-    typeof secondComment === "string"
-  ) {
+  if (typeof firstComment === "string" || typeof secondComment === "string") {
     return firstComment === secondComment;
   }
 
@@ -147,13 +144,10 @@ function getCommentId(
     areSameComment(originalComment, comment),
   );
 
-  const finalIndex =
-    originalIndex >= 0 ? originalIndex : fallbackIndex;
+  const finalIndex = originalIndex >= 0 ? originalIndex : fallbackIndex;
 
   const createdAtValue =
-    typeof comment === "string"
-      ? 0
-      : getCreatedAtValue(comment?.createdAt);
+    typeof comment === "string" ? 0 : getCreatedAtValue(comment?.createdAt);
 
   return `${postId}_${finalIndex}_${createdAtValue}`;
 }
@@ -166,16 +160,11 @@ function getPostTags(post: any) {
       : [];
 }
 
-function renderAvatar(
-  avatar: string | undefined,
-  size: number = 40,
-) {
+function renderAvatar(avatar: string | undefined, size: number = 40) {
   return (
     <Image
       source={
-        avatar
-          ? { uri: avatar }
-          : require("../assets/avatar-placeholder.png")
+        avatar ? { uri: avatar } : require("../assets/avatar-placeholder.png")
       }
       style={{
         width: size,
@@ -191,6 +180,7 @@ export default function PostDetailModal({
   visible,
   post,
   onClose,
+  isDark: isDarkProp,
   waterDropToastVisible = false,
   targetCommentId = null,
   currentUserId = "",
@@ -205,6 +195,8 @@ export default function PostDetailModal({
   showCommentInput = false,
   renderCommentInput,
 }: PostDetailModalProps) {
+  const colorScheme = useColorScheme();
+  const isDark = isDarkProp ?? colorScheme === "dark";
   const scrollViewRef = useRef<ScrollView>(null);
 
   // 留言區塊相對於 ScrollView 的位置
@@ -214,9 +206,7 @@ export default function PostDetailModal({
   const commentPositionsRef = useRef<Record<string, number>>({});
 
   // 記錄閃爍動畫計時器
-  const highlightTimersRef = useRef<
-    ReturnType<typeof setTimeout>[]
-  >([]);
+  const highlightTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   /*
     記錄目前已經顯示過提示動畫的留言。
@@ -225,16 +215,15 @@ export default function PostDetailModal({
   */
   const revealedRequestRef = useRef("");
 
-  const [highlightedCommentId, setHighlightedCommentId] =
-    useState<string | null>(null);
+  const [highlightedCommentId, setHighlightedCommentId] = useState<
+    string | null
+  >(null);
 
   const postId = post?.id || "";
 
   const postTags = post ? getPostTags(post) : [];
 
-  const originalComments = Array.isArray(post?.comments)
-    ? post.comments
-    : [];
+  const originalComments = Array.isArray(post?.comments) ? post.comments : [];
 
   /*
     有傳入排序後留言時，使用排序後留言。
@@ -290,9 +279,7 @@ export default function PostDetailModal({
     return [...ordered, ...remaining];
   }, [comments, orderedCommentIds, originalComments, postId]);
 
-  const previousCommentSortModeRef = useRef<"new" | "likes">(
-    commentSortMode,
-  );
+  const previousCommentSortModeRef = useRef<"new" | "likes">(commentSortMode);
 
   useEffect(() => {
     if (
@@ -300,9 +287,7 @@ export default function PostDetailModal({
       (previousCommentSortModeRef.current !== commentSortMode ||
         orderedCommentIds.length === 0)
     ) {
-      setOrderedCommentIds(
-        computeOrderedCommentIds(comments, commentSortMode),
-      );
+      setOrderedCommentIds(computeOrderedCommentIds(comments, commentSortMode));
     }
 
     previousCommentSortModeRef.current = commentSortMode;
@@ -310,9 +295,7 @@ export default function PostDetailModal({
 
   const handleRefreshComments = () => {
     setRefreshing(true);
-    setOrderedCommentIds(
-      computeOrderedCommentIds(comments, commentSortMode),
-    );
+    setOrderedCommentIds(computeOrderedCommentIds(comments, commentSortMode));
     setRefreshing(false);
   };
 
@@ -320,9 +303,8 @@ export default function PostDetailModal({
 
   const hasSavedPost = (post?.savedBy || []).includes(currentUserId);
   const isOwnPost =
-  !!currentUserId &&
-  (post?.authorId === currentUserId ||
-    post?.deviceId === currentUserId);
+    !!currentUserId &&
+    (post?.authorId === currentUserId || post?.deviceId === currentUserId);
 
   const clearHighlightTimers = useCallback(() => {
     highlightTimersRef.current.forEach((timer) => {
@@ -360,8 +342,7 @@ export default function PostDetailModal({
       return;
     }
 
-    const commentY =
-      commentPositionsRef.current[targetCommentId];
+    const commentY = commentPositionsRef.current[targetCommentId];
 
     // 留言尚未完成排版時，稍後會透過 onLayout 再次嘗試
     if (typeof commentY !== "number") {
@@ -371,8 +352,7 @@ export default function PostDetailModal({
     // 先記錄再執行動畫，避免 Firestore 更新後重新播放
     revealedRequestRef.current = requestKey;
 
-    const scrollY =
-      commentSectionYRef.current + commentY - 24;
+    const scrollY = commentSectionYRef.current + commentY - 24;
 
     scrollViewRef.current?.scrollTo({
       y: Math.max(scrollY, 0),
@@ -460,18 +440,24 @@ export default function PostDetailModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
-        <SafeAreaView style={styles.postDetailContainer}>
-          <View style={styles.postDetailHeader}>
+        <SafeAreaView
+          style={[
+            styles.postDetailContainer,
+            isDark && styles.postDetailContainerDark,
+          ]}
+        >
+          <View
+            style={[
+              styles.postDetailHeader,
+              isDark && styles.postDetailHeaderDark,
+            ]}
+          >
             <TouchableOpacity
               style={styles.headerActionButton}
               onPress={onClose}
@@ -479,11 +465,13 @@ export default function PostDetailModal({
               <Ionicons
                 name="chevron-back"
                 size={26}
-                color="#333333"
+                color={isDark ? "#FFFFFF" : "#333333"}
               />
             </TouchableOpacity>
 
-            <Text style={styles.postDetailTitle}>
+            <Text
+              style={[styles.postDetailTitle, isDark && styles.textWhiteDark]}
+            >
               貼文詳情
             </Text>
 
@@ -491,15 +479,9 @@ export default function PostDetailModal({
           </View>
           {waterDropToastVisible ? (
             <View style={styles.waterDropToast}>
-              <Ionicons
-                name="water"
-                size={20}
-                color="#6FA8DC"
-              />
+              <Ionicons name="water" size={20} color="#6FA8DC" />
 
-              <Text style={styles.waterDropToastText}>
-                獲得 3 個水滴
-              </Text>
+              <Text style={styles.waterDropToastText}>獲得 3 個水滴</Text>
             </View>
           ) : null}
 
@@ -525,7 +507,12 @@ export default function PostDetailModal({
               }}
             >
               {/* 貼文卡片 */}
-              <View style={styles.postDetailCard}>
+              <View
+                style={[
+                  styles.postDetailCard,
+                  isDark && styles.postDetailCardDark,
+                ]}
+              >
                 <View style={styles.postHeader}>
                   <View style={styles.authorArea}>
                     {renderAvatar(
@@ -535,14 +522,24 @@ export default function PostDetailModal({
                     )}
 
                     <View style={styles.authorTextArea}>
-                      <Text style={styles.authorName}>
+                      <Text
+                        style={[
+                          styles.authorName,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
                         {profileMap[post.authorId || ""]?.name ||
                           post.authorName ||
                           post.userId ||
                           "匿名小夥伴"}
                       </Text>
 
-                      <Text style={styles.postTime}>
+                      <Text
+                        style={[
+                          styles.postTime,
+                          isDark && styles.textMutedDark,
+                        ]}
+                      >
                         {formatTime(post.createdAt)}
                       </Text>
                     </View>
@@ -567,8 +564,16 @@ export default function PostDetailModal({
                 {postTags.length > 0 && (
                   <View style={styles.postTagRow}>
                     {postTags.map((tag: string) => (
-                      <View key={tag} style={styles.postTag}>
-                        <Text style={styles.postTagText}>
+                      <View
+                        key={tag}
+                        style={[styles.postTag, isDark && styles.postTagDark]}
+                      >
+                        <Text
+                          style={[
+                            styles.postTagText,
+                            isDark && styles.textWhiteDark,
+                          ]}
+                        >
                           #{tag}
                         </Text>
                       </View>
@@ -577,7 +582,9 @@ export default function PostDetailModal({
                 )}
 
                 {post.text || post.content ? (
-                  <Text style={styles.postText}>
+                  <Text
+                    style={[styles.postText, isDark && styles.textWhiteDark]}
+                  >
                     {post.text || post.content}
                   </Text>
                 ) : null}
@@ -598,15 +605,9 @@ export default function PostDetailModal({
 
                 {post.media && post.media.type === "video" ? (
                   <View style={styles.videoBox}>
-                    <Ionicons
-                      name="videocam"
-                      size={36}
-                      color="#ffffff"
-                    />
+                    <Ionicons name="videocam" size={36} color="#ffffff" />
 
-                    <Text style={styles.videoText}>
-                      影片貼文
-                    </Text>
+                    <Text style={styles.videoText}>影片貼文</Text>
                   </View>
                 ) : null}
 
@@ -620,21 +621,22 @@ export default function PostDetailModal({
                     disabled={!onLikePost}
                   >
                     <Ionicons
-                      name={
-                        hasLikedPost
-                          ? "heart"
-                          : "heart-outline"
-                      }
+                      name={hasLikedPost ? "heart" : "heart-outline"}
                       size={22}
                       color={
-                        hasLikedPost
+                        isDark
                           ? "#E07A7A"
-                          : "#999999"
+                          : hasLikedPost
+                            ? "#E07A7A"
+                            : "#999999"
                       }
                     />
 
                     <Text
-                      style={styles.postActionText}
+                      style={[
+                        styles.postActionText,
+                        isDark && styles.textWhiteDark,
+                      ]}
                     >
                       {post.likes || 0}
                     </Text>
@@ -647,10 +649,15 @@ export default function PostDetailModal({
                     <Ionicons
                       name="chatbubble-outline"
                       size={21}
-                      color="#7FA8B8"
+                      color={isDark ? "#7FA8B8" : "#7FA8B8"}
                     />
 
-                    <Text style={styles.postActionText}>
+                    <Text
+                      style={[
+                        styles.postActionText,
+                        isDark && styles.textWhiteDark,
+                      ]}
+                    >
                       {(post.comments || []).length}
                     </Text>
                   </TouchableOpacity>
@@ -663,16 +670,17 @@ export default function PostDetailModal({
                     disabled={!onSavePost}
                   >
                     <Ionicons
-                      name={
-                        hasSavedPost
-                          ? "bookmark"
-                          : "bookmark-outline"
-                      }
+                      name={hasSavedPost ? "bookmark" : "bookmark-outline"}
                       size={21}
-                      color="#D39B5E"
+                      color={isDark ? "#D39B5E" : "#D39B5E"}
                     />
 
-                    <Text style={styles.postActionText}>
+                    <Text
+                      style={[
+                        styles.postActionText,
+                        isDark && styles.textWhiteDark,
+                      ]}
+                    >
                       {(post.savedBy || []).length}
                     </Text>
                   </TouchableOpacity>
@@ -681,16 +689,23 @@ export default function PostDetailModal({
 
               {/* 留言區段 */}
               <View
-                style={styles.detailCommentSection}
+                style={[
+                  styles.detailCommentSection,
+                  isDark && styles.detailCommentSectionDark,
+                ]}
                 onLayout={(event) => {
-                  commentSectionYRef.current =
-                    event.nativeEvent.layout.y;
+                  commentSectionYRef.current = event.nativeEvent.layout.y;
 
                   revealTargetComment();
                 }}
               >
                 <View style={styles.commentSortHeader}>
-                  <Text style={styles.detailCommentTitle}>
+                  <Text
+                    style={[
+                      styles.detailCommentTitle,
+                      isDark && styles.textWhiteDark,
+                    ]}
+                  >
                     留言
                   </Text>
 
@@ -699,8 +714,12 @@ export default function PostDetailModal({
                       <TouchableOpacity
                         style={[
                           styles.commentSortBtn,
+                          isDark && styles.commentSortBtnDark,
                           commentSortMode === "new" &&
                             styles.commentSortBtnActive,
+                          isDark &&
+                            commentSortMode === "new" &&
+                            styles.commentSortBtnActiveDark,
                         ]}
                         onPress={() => {
                           onCommentSortChange("new");
@@ -709,6 +728,9 @@ export default function PostDetailModal({
                         <Text
                           style={[
                             styles.commentSortText,
+                            isDark &&
+                              commentSortMode !== "new" &&
+                              styles.commentSortTextDarkInactive,
                             commentSortMode === "new" &&
                               styles.commentSortTextActive,
                           ]}
@@ -720,8 +742,12 @@ export default function PostDetailModal({
                       <TouchableOpacity
                         style={[
                           styles.commentSortBtn,
+                          isDark && styles.commentSortBtnDark,
                           commentSortMode === "likes" &&
                             styles.commentSortBtnActive,
+                          isDark &&
+                            commentSortMode === "likes" &&
+                            styles.commentSortBtnActiveDark,
                         ]}
                         onPress={() => {
                           onCommentSortChange("likes");
@@ -730,6 +756,9 @@ export default function PostDetailModal({
                         <Text
                           style={[
                             styles.commentSortText,
+                            isDark &&
+                              commentSortMode !== "likes" &&
+                              styles.commentSortTextDarkInactive,
                             commentSortMode === "likes" &&
                               styles.commentSortTextActive,
                           ]}
@@ -749,7 +778,12 @@ export default function PostDetailModal({
                       color="#F0F4EC"
                     />
 
-                    <Text style={styles.noCommentText}>
+                    <Text
+                      style={[
+                        styles.noCommentText,
+                        isDark && styles.textMutedDark,
+                      ]}
+                    >
                       目前沒有留言
                     </Text>
                   </View>
@@ -763,16 +797,12 @@ export default function PostDetailModal({
                     );
 
                     const commentText =
-                      typeof comment === "string"
-                        ? comment
-                        : comment.text;
+                      typeof comment === "string" ? comment : comment.text;
 
                     const commentUserName =
                       typeof comment === "string"
                         ? "匿名小夥伴"
-                        : comment.userName ||
-                          comment.userId ||
-                          "匿名小夥伴";
+                        : comment.userName || comment.userId || "匿名小夥伴";
 
                     const commentUserAvatar =
                       typeof comment === "string"
@@ -780,27 +810,18 @@ export default function PostDetailModal({
                         : comment.userAvatar || "";
 
                     const commentCreatedAt =
-                      typeof comment === "string"
-                        ? null
-                        : comment.createdAt;
+                      typeof comment === "string" ? null : comment.createdAt;
 
                     const commentImageUrl =
-                      typeof comment === "string"
-                        ? ""
-                        : comment.imageUrl || "";
+                      typeof comment === "string" ? "" : comment.imageUrl || "";
 
                     const likedBy =
-                      typeof comment === "string"
-                        ? []
-                        : comment.likedBy || [];
+                      typeof comment === "string" ? [] : comment.likedBy || [];
 
                     const likes =
-                      typeof comment === "string"
-                        ? 0
-                        : comment.likes || 0;
+                      typeof comment === "string" ? 0 : comment.likes || 0;
 
-                    const hasLikedComment =
-                      likedBy.includes(currentUserId);
+                    const hasLikedComment = likedBy.includes(currentUserId);
 
                     return (
                       <View
@@ -824,11 +845,21 @@ export default function PostDetailModal({
                         {renderAvatar(commentUserAvatar, 32)}
 
                         <View style={styles.commentContent}>
-                          <Text style={styles.commentUserName}>
+                          <Text
+                            style={[
+                              styles.commentUserName,
+                              isDark && styles.textWhiteDark,
+                            ]}
+                          >
                             {commentUserName}
                           </Text>
 
-                          <Text style={styles.commentText}>
+                          <Text
+                            style={[
+                              styles.commentText,
+                              isDark && styles.textWhiteDark,
+                            ]}
+                          >
                             {commentText}
                           </Text>
 
@@ -840,12 +871,16 @@ export default function PostDetailModal({
                           ) : null}
 
                           <View style={styles.commentBottomRow}>
-                            <Text style={styles.commentTime}>
+                            <Text
+                              style={[
+                                styles.commentTime,
+                                isDark && styles.textMutedDark,
+                              ]}
+                            >
                               {formatTime(commentCreatedAt)}
                             </Text>
 
-                            {onLikeComment &&
-                            typeof comment !== "string" ? (
+                            {onLikeComment && typeof comment !== "string" ? (
                               <TouchableOpacity
                                 onPress={() => {
                                   onLikeComment(commentId);
@@ -854,19 +889,20 @@ export default function PostDetailModal({
                               >
                                 <Ionicons
                                   name={
-                                    hasLikedComment
-                                      ? "heart"
-                                      : "heart-outline"
+                                    hasLikedComment ? "heart" : "heart-outline"
                                   }
                                   size={16}
                                   color={
-                                    hasLikedComment
-                                      ? "#E07A7A"
-                                      : "#999999"
+                                    hasLikedComment ? "#E07A7A" : "#999999"
                                   }
                                 />
 
-                                <Text style={styles.commentLikeText}>
+                                <Text
+                                  style={[
+                                    styles.commentLikeText,
+                                    isDark && styles.textMutedDark,
+                                  ]}
+                                >
                                   {likes}
                                 </Text>
                               </TouchableOpacity>
@@ -886,7 +922,12 @@ export default function PostDetailModal({
           ) : null}
 
           {showCommentInput && renderCommentInput && (
-            <View style={styles.commentInputBar}>
+            <View
+              style={[
+                styles.commentInputBar,
+                isDark && styles.commentInputBarDark,
+              ]}
+            >
               {renderCommentInput()}
             </View>
           )}
@@ -906,6 +947,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#F7F3EC",
   },
 
+  postDetailContainerDark: {
+    backgroundColor: "#202624",
+  },
+
   postDetailHeader: {
     height: 56,
     flexDirection: "row",
@@ -915,6 +960,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderBottomWidth: 0.5,
     borderBottomColor: "#eeeeee",
+  },
+
+  postDetailHeaderDark: {
+    backgroundColor: "#202624",
+    borderBottomColor: "#202624",
   },
 
   postDetailTitle: {
@@ -941,6 +991,10 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderRadius: 20,
     backgroundColor: "#ffffff",
+  },
+
+  postDetailCardDark: {
+    backgroundColor: "#313B37",
   },
 
   postHeader: {
@@ -991,6 +1045,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     backgroundColor: "#F0F4EC",
+  },
+
+  postTagDark: {
+    backgroundColor: "#475F4B",
   },
 
   postTagText: {
@@ -1064,6 +1122,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
 
+  detailCommentSectionDark: {
+    backgroundColor: "#313B37",
+  },
+
   detailCommentTitle: {
     marginBottom: 10,
     fontSize: 16,
@@ -1095,6 +1157,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#B1D497",
   },
 
+  commentSortBtnDark: {
+    backgroundColor: "#9FA7A2",
+  },
+
+  commentSortBtnActiveDark: {
+    backgroundColor: "#475F4B",
+  },
+
   commentSortText: {
     fontSize: 12,
     fontWeight: "600",
@@ -1103,6 +1173,10 @@ const styles = StyleSheet.create({
 
   commentSortTextActive: {
     color: "#ffffff",
+  },
+
+  commentSortTextDarkInactive: {
+    color: "#7A746E",
   },
 
   noCommentBox: {
@@ -1192,6 +1266,19 @@ const styles = StyleSheet.create({
     borderTopWidth: 0.5,
     borderTopColor: "#eeeeee",
   },
+
+  commentInputBarDark: {
+    backgroundColor: "#313B37",
+    borderTopColor: "#313B37",
+  },
+
+  textWhiteDark: {
+    color: "#FFFFFF",
+  },
+
+  textMutedDark: {
+    color: "#D2D8D5",
+  },
   waterDropToast: {
     position: "absolute",
     top: 150,
@@ -1204,7 +1291,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#B1D497",
+    backgroundColor: "#d5e6c7",
     borderRadius: 999,
     shadowColor: "#000000",
     shadowOffset: {
@@ -1218,7 +1305,7 @@ const styles = StyleSheet.create({
   waterDropToastText: {
     marginLeft: 7,
     fontSize: 15,
-    fontWeight: "700",
-    color: "#ffffff",
+    fontWeight: "500",
+    color: "#464646",
   },
 });

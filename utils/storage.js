@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  updateDoc,
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    updateDoc,
 } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import petsData from "../data/pets.json";
@@ -308,6 +308,7 @@ export const createPlantForPost = async (seedType, postId) => {
     growth: 0,
     repliesCount: 0,
     imageIndex: -1,
+    isSeedMoving: true,
     locked: false,
     createdAt: new Date().toISOString(),
     postId: postId || null,
@@ -394,6 +395,7 @@ export const plantSeed = async (seedType, postId) => {
     growth: 0, // 成長階段 0-5
     repliesCount: 0, // 收到的回覆數
     imageIndex: -1,
+    isSeedMoving: true,
     locked: false,
     createdAt: new Date().toISOString(),
     postId: postId || null, // 關聯的貼文 ID

@@ -113,6 +113,8 @@ const DEAD_ASSET_MAP: Record<string, any> = {
   pet2: require("../assets/plant/pet2/cu.png"),
 };
 
+const SEED_ASSET = require("../assets/plant/seed.png");
+
 // 這些分類會自動生成植物，且從對應兩個變體隨機選 1 個
 export const TAG_TO_VARIANTS: Record<string, string[]> = {
   運動: ["sport1", "sport2"],
@@ -151,6 +153,10 @@ export const getRandomVariantForTag = (tag: string): string | null => {
 export const getAssetForPlant = (plant: any) => {
   if (!plant || !plant.type) return null;
 
+  if (plant.isSeedMoving) {
+    return SEED_ASSET;
+  }
+
   if (plant.wiltedAt) {
     return DEAD_ASSET_MAP[plant.type] || null;
   }
@@ -184,7 +190,7 @@ export const PLANT_CATALOG = [
   },
   {
     type: "mood1",
-    name: "黃色雛菊",
+    name: "白色雛菊",
     bloomImage: require("../assets/plant/mood1/mood1-5.png"),
     silhouetteImage: require("../assets/plant/mood1/silhouette.png"),
   },
@@ -232,7 +238,7 @@ export const PLANT_CATALOG = [
   },
   {
     type: "pet1",
-    name: "白色雛菊",
+    name: "黃色雛菊",
     bloomImage: require("../assets/plant/pet1/pet1-5.png"),
     silhouetteImage: require("../assets/plant/pet1/silhouette.png"),
   },

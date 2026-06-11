@@ -1,8 +1,8 @@
 import { Image, StyleSheet, Text, View } from "react-native";
 import {
-    DEFAULT_PLANT_IMAGE_OFFSETS,
-    DEFAULT_PLANT_IMAGE_SIZES,
-    DEFAULT_PLANT_IMAGE_XOFFSETS,
+  DEFAULT_PLANT_IMAGE_OFFSETS,
+  DEFAULT_PLANT_IMAGE_SIZES,
+  DEFAULT_PLANT_IMAGE_XOFFSETS,
 } from "../constants/plantImageSizes";
 import { getAssetForPlant, getFallbackEmoji } from "../utils/plantCatalog";
 
@@ -30,6 +30,7 @@ export default function FlowerCard({
   const rawIndex =
     typeof plant?.imageIndex === "number" ? plant.imageIndex : -1;
   const assetIndex = Math.max(0, Math.abs(rawIndex || -1) - 1);
+  const isMovingSeed = plant?.isSeedMoving === true;
 
   const sizeFromMap = Array.isArray(imageSizes)
     ? imageSizes[assetIndex]
@@ -38,12 +39,13 @@ export default function FlowerCard({
   const defaultSize = rawIndex === -1 ? 144 : 112;
   const baseImageSize =
     typeof sizeFromMap === "number" ? sizeFromMap : defaultSize;
+  const resolvedBaseImageSize = isMovingSeed ? 80 : baseImageSize;
 
   // 若植物已枯萎，放大顯示圖片（維持底部置中）
   const WILTED_IMAGE_SCALE = 1.6;
   const imageSize = plant?.wiltedAt
-    ? Math.round(baseImageSize * WILTED_IMAGE_SCALE)
-    : baseImageSize;
+    ? Math.round(resolvedBaseImageSize * WILTED_IMAGE_SCALE)
+    : resolvedBaseImageSize;
 
   const imageStyle = [
     styles.plantImage,
@@ -75,10 +77,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   plantImage: {
-    borderWidth: 3,
-    borderColor: "#a29add",
-    borderRadius: 18,
-    overflow: "hidden",
+    borderWidth: 0,
   },
   emoji: {
     fontSize: 50,

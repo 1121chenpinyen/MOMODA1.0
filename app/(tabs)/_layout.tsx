@@ -19,12 +19,21 @@ const profileicon = require("../../assets/profileicon.png");
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const tabColors = Colors[colorScheme ?? "light"];
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: "#C1946D", // 選取時的文字顏色
-        tabBarInactiveTintColor: "#dab99d", // 未選取時的文字顏色
+        tabBarActiveTintColor: isDark ? "#E7C48E" : "#C1946D",
+        tabBarInactiveTintColor: isDark ? "#8F9AA8" : "#dab99d",
+        tabBarStyle: {
+          backgroundColor: isDark ? "#202624" : tabColors.background,
+          borderTopColor: isDark ? "#202624" : "#E6D9C7",
+        },
+        tabBarLabelStyle: {
+          color: tabColors.text,
+        },
         headerShown: false,
       }}
     >
@@ -187,7 +196,6 @@ export default function TabLayout() {
           ),
         }}
       />
-      
     </Tabs>
   );
 }

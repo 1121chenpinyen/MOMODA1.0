@@ -34,6 +34,7 @@ import {
 } from "react-native";
 
 import PostDetailModal from "../../components/PostDetailModal";
+import { useColorScheme } from "../../components/useColorScheme";
 import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
 import { getRandomVariantForTag } from "../../utils/plantCatalog";
@@ -43,7 +44,7 @@ import {
   createPlantForPost,
   getGarden,
   getGlobalData,
-  updateGlobalData
+  updateGlobalData,
 } from "../../utils/storage";
 
 const TAGS = ["人際", "學業/工作", "飲食", "運動", "寵物", "娛樂", "其他"];
@@ -117,6 +118,8 @@ const getPostTags = (post: PostType) =>
 
 export default function HomeScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
   const [currentUser, setCurrentUser] = useState<UserType>({
     userId: "",
     name: "匿名小夥伴",
@@ -144,11 +147,11 @@ export default function HomeScreen() {
   const [commentSortMode, setCommentSortMode] = useState<"new" | "likes">(
     "new",
   );
-  const [waterDropToastVisible, setWaterDropToastVisible] =
-    useState(false);
+  const [waterDropToastVisible, setWaterDropToastVisible] = useState(false);
 
-  const waterDropToastTimerRef =
-    useRef<ReturnType<typeof setTimeout> | null>(null);
+  const waterDropToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const showWaterDropToast = () => {
     setWaterDropToastVisible(true);
@@ -864,7 +867,7 @@ export default function HomeScreen() {
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: "#B1D497",
+          backgroundColor: isDark ? "#475F4B" : "#B1D497",
           justifyContent: "center",
           alignItems: "center",
         }}
@@ -875,22 +878,22 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.topArea}>
+    <SafeAreaView style={[styles.container, isDark && styles.containerDark]}>
+      <View style={[styles.topArea, isDark && styles.topAreaDark]}>
         <View style={styles.searchRow}>
-          <View style={styles.searchBox}>
+          <View style={[styles.searchBox, isDark && styles.searchBoxDark]}>
             <Ionicons name="search" size={18} color="#999" />
             <TextInput
               style={styles.searchInput}
               placeholder="搜尋貼文..."
-              placeholderTextColor="#aaa"
+              placeholderTextColor={isDark ? "#D2D8D5" : "#aaa"}
               value={searchText}
               onChangeText={setSearchText}
             />
           </View>
 
           <TouchableOpacity
-            style={styles.sortBtn}
+            style={[styles.sortBtn, isDark && styles.sortBtnDark]}
             onPress={() => setShowSortMenu(!showSortMenu)}
           >
             <Ionicons name="filter" size={18} color="#777" />
@@ -899,7 +902,7 @@ export default function HomeScreen() {
         </View>
 
         {showSortMenu && (
-          <View style={styles.sortMenu}>
+          <View style={[styles.sortMenu, isDark && styles.sortMenuDark]}>
             <TouchableOpacity
               style={styles.sortMenuItem}
               onPress={() => {
@@ -907,7 +910,11 @@ export default function HomeScreen() {
                 setShowSortMenu(false);
               }}
             >
-              <Text style={styles.sortMenuText}>最新</Text>
+              <Text
+                style={[styles.sortMenuText, isDark && styles.textWhiteDark]}
+              >
+                最新
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -917,7 +924,11 @@ export default function HomeScreen() {
                 setShowSortMenu(false);
               }}
             >
-              <Text style={styles.sortMenuText}>讚數最多</Text>
+              <Text
+                style={[styles.sortMenuText, isDark && styles.textWhiteDark]}
+              >
+                讚數最多
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -927,7 +938,11 @@ export default function HomeScreen() {
                 setShowSortMenu(false);
               }}
             >
-              <Text style={styles.sortMenuText}>收藏數最多</Text>
+              <Text
+                style={[styles.sortMenuText, isDark && styles.textWhiteDark]}
+              >
+                收藏數最多
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -940,7 +955,11 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={[
               styles.filterTag,
+              isDark && styles.filterTagDark,
               selectedFilterTag === "" && styles.filterTagSelected,
+              isDark &&
+                selectedFilterTag === "" &&
+                styles.filterTagSelectedDark,
             ]}
             onPress={() => setSelectedFilterTag("")}
           >
@@ -959,7 +978,11 @@ export default function HomeScreen() {
               key={tag}
               style={[
                 styles.filterTag,
+                isDark && styles.filterTagDark,
                 selectedFilterTag === tag && styles.filterTagSelected,
+                isDark &&
+                  selectedFilterTag === tag &&
+                  styles.filterTagSelectedDark,
               ]}
               onPress={() => setSelectedFilterTag(tag)}
             >
@@ -990,8 +1013,12 @@ export default function HomeScreen() {
         {filteredPosts.length === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="leaf-outline" size={48} color="#F0F4EC" />
-            <Text style={styles.emptyTitle}>目前沒有貼文</Text>
-            <Text style={styles.emptyText}>按右下角的＋分享你的想法吧</Text>
+            <Text style={[styles.emptyTitle, isDark && styles.textWhiteDark]}>
+              目前沒有貼文
+            </Text>
+            <Text style={[styles.emptyText, isDark && styles.textWhiteDark]}>
+              按右下角的＋分享你的想法吧
+            </Text>
           </View>
         ) : (
           filteredPosts.map((post) => {
@@ -1003,7 +1030,7 @@ export default function HomeScreen() {
             return (
               <TouchableOpacity
                 key={post.id}
-                style={styles.postCard}
+                style={[styles.postCard, isDark && styles.postCardDark]}
                 activeOpacity={0.96}
                 onPress={() => openCommentModal(post)}
               >
@@ -1016,12 +1043,22 @@ export default function HomeScreen() {
                     )}
 
                     <View style={{ marginLeft: 10 }}>
-                      <Text style={styles.authorName}>
+                      <Text
+                        style={[
+                          styles.authorName,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
                         {profileMap[post.authorId || ""]?.name ||
                           post.authorName ||
                           "匿名小夥伴"}
                       </Text>
-                      <Text style={styles.postTime}>
+                      <Text
+                        style={[
+                          styles.postTime,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
                         {formatTime(post.createdAt)}
                       </Text>
                     </View>
@@ -1044,8 +1081,18 @@ export default function HomeScreen() {
                   return postTags.length > 0 ? (
                     <View style={styles.postTagRow}>
                       {postTags.map((tag) => (
-                        <View key={tag} style={styles.postTag}>
-                          <Text style={styles.postTagText}>#{tag}</Text>
+                        <View
+                          key={tag}
+                          style={[styles.postTag, isDark && styles.postTagDark]}
+                        >
+                          <Text
+                            style={[
+                              styles.postTagText,
+                              isDark && styles.postTagTextDark,
+                            ]}
+                          >
+                            #{tag}
+                          </Text>
                         </View>
                       ))}
                     </View>
@@ -1053,7 +1100,11 @@ export default function HomeScreen() {
                 })()}
 
                 {post.text ? (
-                  <Text style={styles.postText}>{post.text}</Text>
+                  <Text
+                    style={[styles.postText, isDark && styles.textWhiteDark]}
+                  >
+                    {post.text}
+                  </Text>
                 ) : null}
 
                 {post.media && post.media.type === "photo" && (
@@ -1081,9 +1132,16 @@ export default function HomeScreen() {
                     <Ionicons
                       name={hasLiked ? "heart" : "heart-outline"}
                       size={22}
-                      color={hasLiked ? "#E07A7A" : "#999"}
+                      color={isDark ? "#E07A7A" : hasLiked ? "#E07A7A" : "#999"}
                     />
-                    <Text style={styles.actionText}>{post.likes || 0}</Text>
+                    <Text
+                      style={[
+                        styles.actionText,
+                        isDark && styles.textWhiteDark,
+                      ]}
+                    >
+                      {post.likes || 0}
+                    </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -1096,9 +1154,14 @@ export default function HomeScreen() {
                     <Ionicons
                       name="chatbubble-outline"
                       size={21}
-                      color="#7FA8B8"
+                      color={isDark ? "#7FA8B8" : "#7FA8B8"}
                     />
-                    <Text style={styles.actionText}>
+                    <Text
+                      style={[
+                        styles.actionText,
+                        isDark && styles.textWhiteDark,
+                      ]}
+                    >
                       {(post.comments || []).length}
                     </Text>
                   </TouchableOpacity>
@@ -1113,9 +1176,14 @@ export default function HomeScreen() {
                     <Ionicons
                       name={hasSaved ? "bookmark" : "bookmark-outline"}
                       size={21}
-                      color="#D39B5E"
+                      color={isDark ? "#D39B5E" : "#D39B5E"}
                     />
-                    <Text style={styles.actionText}>
+                    <Text
+                      style={[
+                        styles.actionText,
+                        isDark && styles.textWhiteDark,
+                      ]}
+                    >
                       {(post.savedBy || []).length}
                     </Text>
                   </TouchableOpacity>
@@ -1145,6 +1213,7 @@ export default function HomeScreen() {
       <PostDetailModal
         visible={commentVisible}
         post={selectedPost}
+        isDark={isDark}
         onClose={() => {
           setCommentVisible(false);
           setSelectedPost(null);
@@ -1182,11 +1251,17 @@ export default function HomeScreen() {
               </View>
             ) : null}
 
-            <View style={styles.commentInputBar}>
+            <View
+              style={[
+                styles.commentInputBar,
+                isDark && styles.commentInputBarDark,
+              ]}
+            >
               <View style={styles.commentInputActions}>
                 <TouchableOpacity
                   style={[
                     styles.commentActionBtn,
+                    isDark && styles.commentActionBtnDark,
                     isSendingComment && styles.commentActionBtnDisabled,
                   ]}
                   onPress={takeCommentPhoto}
@@ -1202,6 +1277,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   style={[
                     styles.commentActionBtn,
+                    isDark && styles.commentActionBtnDark,
                     isSendingComment && styles.commentActionBtnDisabled,
                   ]}
                   onPress={pickCommentPhoto}
@@ -1218,12 +1294,13 @@ export default function HomeScreen() {
               <TextInput
                 style={[
                   styles.commentInputInPage,
+                  isDark && styles.commentInputInPageDark,
                   isSendingComment && styles.commentInputDisabled,
                 ]}
                 placeholder={
                   isSendingComment ? "留言發送中..." : "輸入你的留言..."
                 }
-                placeholderTextColor="#aaa"
+                placeholderTextColor={isDark ? "#7A746E" : "#aaa"}
                 value={commentText}
                 onChangeText={setCommentText}
                 editable={!isSendingComment}
@@ -1232,6 +1309,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[
                   styles.sendCommentBtn,
+                  isDark && styles.sendCommentBtnDark,
                   isSendingComment && styles.sendCommentBtnDisabled,
                 ]}
                 onPress={handleAddComment}
@@ -1268,6 +1346,8 @@ function PublishDialog({
   userAvatar,
   userName = "你",
 }: PublishDialogProps) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
   const [postText, setPostText] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<MediaType | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -1452,7 +1532,12 @@ function PublishDialog({
             {userAvatar ? (
               <Image source={{ uri: userAvatar }} style={styles.userAvatar} />
             ) : (
-              <View style={styles.defaultAvatar}>
+              <View
+                style={[
+                  styles.defaultAvatar,
+                  isDark && styles.defaultAvatarDark,
+                ]}
+              >
                 <Ionicons name="person" size={22} color="#fff" />
               </View>
             )}
@@ -1617,6 +1702,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 0.5,
     borderTopColor: "#eee",
   },
+  commentInputBarDark: {
+    backgroundColor: "#313B37",
+    borderTopColor: "#313B37",
+  },
   commentInputActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -1630,6 +1719,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 8,
+  },
+  commentActionBtnDark: {
+    backgroundColor: "#39443E",
   },
   commentActionText: {
     fontSize: 12,
@@ -1668,6 +1760,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#333",
   },
+  commentInputInPageDark: {
+    backgroundColor: "#9FA7A2",
+    color: "#7A746E",
+  },
   commentBottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1694,6 +1790,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginLeft: 10,
   },
+  sendCommentBtnDark: {
+    backgroundColor: "#A8D18D",
+  },
   sendCommentBtnDisabled: {
     backgroundColor: "#F0F4EC",
   },
@@ -1710,14 +1809,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F7F3EC",
   },
+  containerDark: {
+    backgroundColor: "#202624",
+  },
+  textWhiteDark: {
+    color: "#FFFFFF",
+  },
   topArea: {
     backgroundColor: "#fff",
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 10,
-    borderBottomWidth: 0.5,
     borderBottomColor: "#eee",
     zIndex: 10,
+  },
+  topAreaDark: {
+    backgroundColor: "#313B37",
   },
   searchRow: {
     flexDirection: "row",
@@ -1733,6 +1840,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 42,
   },
+  searchBoxDark: {
+    backgroundColor: "#9FA7A2",
+  },
   searchInput: {
     flex: 1,
     marginLeft: 8,
@@ -1746,6 +1856,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F0F4EC",
     paddingHorizontal: 12,
     borderRadius: 20,
+  },
+  sortBtnDark: {
+    backgroundColor: "#9FA7A2",
   },
   sortText: {
     fontSize: 13,
@@ -1768,6 +1881,9 @@ const styles = StyleSheet.create({
     elevation: 5,
     zIndex: 99,
   },
+  sortMenuDark: {
+    backgroundColor: "#313B37",
+  },
   sortMenuItem: {
     paddingVertical: 10,
     paddingHorizontal: 14,
@@ -1786,13 +1902,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#F0F4EC",
     borderRadius: 18,
   },
+  filterTagDark: {
+    backgroundColor: "#9FA7A2",
+  },
   filterTagSelected: {
     backgroundColor: "#B1D497",
+  },
+  filterTagSelectedDark: {
+    backgroundColor: "#475F4B",
   },
   filterTagText: {
     color: "#777",
     fontSize: 13,
     fontWeight: "600",
+  },
+  filterTagTextDark: {
+    color: "#FFFFFF",
   },
   filterTagTextSelected: {
     color: "#fff",
@@ -1829,6 +1954,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
+  postCardDark: {
+    backgroundColor: "#313B37",
+  },
   postHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1857,6 +1985,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginRight: 8,
   },
+  postTagDark: {
+    backgroundColor: "#475F4B",
+  },
   postTagRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1866,6 +1997,9 @@ const styles = StyleSheet.create({
     color: "#777",
     fontSize: 13,
     fontWeight: "700",
+  },
+  postTagTextDark: {
+    color: "#FFFFFF",
   },
   postText: {
     marginTop: 12,
@@ -2145,6 +2279,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#B1D497",
     justifyContent: "center",
     alignItems: "center",
+  },
+  defaultAvatarDark: {
+    backgroundColor: "#475F4B",
   },
   userName: {
     fontSize: 16,

@@ -24,6 +24,8 @@ import {
   View,
 } from "react-native";
 import FlowerCard from "../../components/FlowerCard";
+import PostDetailModal from "../../components/PostDetailModal";
+import { useColorScheme } from "../../components/useColorScheme";
 import { db } from "../../config/firebaseConfig";
 import {
   DEFAULT_PLANT_IMAGE_OFFSETS,
@@ -31,10 +33,8 @@ import {
   DEFAULT_PLANT_IMAGE_XOFFSETS,
 } from "../../constants/plantImageSizes";
 import { getDeviceId } from "../../utils/getDeviceId";
-import { getFallbackEmoji } from "../../utils/plantCatalog";
 import {
   claimPendingRewardsOnce,
-  clearAllPlants,
   getGarden,
   getGlobalData,
   getPlantRemainingLife,
@@ -55,6 +55,7 @@ const BACKGROUND_ASPECT_RATIO =
 
 const { width, height } = Dimensions.get("window");
 const PLANT_SIZE = 10;
+const LOCK_Y_OFFSET_ON_CONFIRM = 0;
 const WORLD_WIDTH = width * 3;
 const BACKGROUND_HEIGHT = WORLD_WIDTH / BACKGROUND_ASPECT_RATIO;
 const MAX_CAMERA_SCALE = 2.2;
@@ -127,6 +128,8 @@ const getDefaultWorldPosition = (
 
 export default function GardenScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
   const [garden, setGarden] = useState<{ seeds: number; plants: any[] } | null>(
     null,
   );
@@ -134,6 +137,7 @@ export default function GardenScreen() {
   const [plantFocusVisible, setPlantFocusVisible] = useState<boolean>(false);
   const [focusedPost, setFocusedPost] = useState<any | null>(null);
   const [loadingPost, setLoadingPost] = useState<boolean>(false);
+  const [postDetailVisible, setPostDetailVisible] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [gardenAreaLayout, setGardenAreaLayout] = useState({
     width,
@@ -141,6 +145,9 @@ export default function GardenScreen() {
   });
   const [waterDrops, setWaterDrops] = useState<number>(0);
   const [fertilizers, setFertilizers] = useState<number>(0);
+  const [rewardToastVisible, setRewardToastVisible] = useState(false);
+  const [rewardToastText, setRewardToastText] = useState("");
+  const [rewardToastIcon, setRewardToastIcon] = useState<string>("leaf");
 
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const zoomTranslateX = useRef(new Animated.Value(0)).current;
@@ -198,6 +205,49 @@ export default function GardenScreen() {
   const mountedRef = useRef(true);
   const hasInitializedCameraRef = useRef(false);
   const hasUnlockedPlantsRef = useRef(false);
+  const rewardToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  const showRewardToast = useCallback((text: string, icon: string = "leaf") => {
+    setRewardToastText(text);
+    setRewardToastIcon(icon);
+    setRewardToastVisible(true);
+
+    if (rewardToastTimerRef.current) {
+      clearTimeout(rewardToastTimerRef.current);
+    }
+
+    rewardToastTimerRef.current = setTimeout(() => {
+      setRewardToastVisible(false);
+    }, 1800);
+  }, []);
+
+  const openPlantPostDetail = useCallback(() => {
+    if (!selectedPlant?.postId) {
+      Alert.alert("提醒", "這株植物沒有對應的貼文");
+      return;
+    }
+
+    if (!focusedPost) {
+      Alert.alert("讀取中", "貼文還在載入，請稍後再試");
+      return;
+    }
+
+    setPostDetailVisible(true);
+  }, [focusedPost, selectedPlant?.postId]);
+
+  function handleFocusBackdropPress() {
+    closeFocusPanel();
+  }
+
+  useEffect(() => {
+    return () => {
+      if (rewardToastTimerRef.current) {
+        clearTimeout(rewardToastTimerRef.current);
+      }
+    };
+  }, []);
 
   const sceneContentHeight = Math.max(
     BACKGROUND_HEIGHT,
@@ -298,6 +348,7 @@ export default function GardenScreen() {
       latestPlant.imageIndex !== selectedPlant.imageIndex ||
       latestPlant.lifeExpireAt !== selectedPlant.lifeExpireAt ||
       latestPlant.repliesCount !== selectedPlant.repliesCount ||
+      latestPlant.isSeedMoving !== selectedPlant.isSeedMoving ||
       latestPlant.locked !== selectedPlant.locked;
 
     if (shouldSyncLatestPlant) {
@@ -338,6 +389,7 @@ export default function GardenScreen() {
   // 需求：每收到 1 次回覆就升 1 階（最多 5 階），且只在 Y 軸變大
   const TOUCH_BASE_BOTTOM_OFFSET = 10; // distance from bottom of plant container to bottom edge of touch area
   const TOUCH_FIXED_WIDTH = 25;
+  const SEED_TOUCH_AREA_Y_SHIFT = -20;
   const STAGE_TOUCH_HEIGHTS = [30, 30, 40, 50, 75, 100];
   const getLockedTouchStyle = (
     plant: any,
@@ -348,7 +400,7 @@ export default function GardenScreen() {
     const imageIndex =
       typeof plant?.imageIndex === "number" ? plant.imageIndex : -1;
     const plantType = typeof plant?.type === "string" ? plant.type : "";
-    const isSeedStage = imageIndex === -1;
+    const isSeedImage = plant?.isSeedMoving === true;
     const visualStage = Math.max(
       0,
       Math.min(5, Math.abs(imageIndex || -1) - 1),
@@ -360,18 +412,18 @@ export default function GardenScreen() {
     const replyStage = Math.max(0, Math.min(stageCount, replies));
     const stage = Math.max(replyStage, visualStage);
     const seedTouchSize = 35;
-    const width = isSeedStage
+    const width = isSeedImage
       ? seedTouchSize
       : isEat2FinalFlower
         ? TOUCH_FIXED_WIDTH + 65
         : TOUCH_FIXED_WIDTH + 10;
-    const height = isSeedStage
+    const height = isSeedImage
       ? seedTouchSize
       : STAGE_TOUCH_HEIGHTS[stage] + 10;
     const left = (PLANT_SIZE - width) / 2;
     const dragTouchLift = 13;
-    const top = isSeedStage
-      ? PLANT_SIZE - height + 13 - dragTouchLift
+    const top = isSeedImage
+      ? PLANT_SIZE - height + 13 - dragTouchLift + SEED_TOUCH_AREA_Y_SHIFT
       : PLANT_SIZE - TOUCH_BASE_BOTTOM_OFFSET - height + 25 - dragTouchLift;
     const out = {
       width,
@@ -453,7 +505,8 @@ export default function GardenScreen() {
             newH +
             38 -
             dragTouchLift +
-            stageOffset;
+            stageOffset +
+            (isSeedImage ? SEED_TOUCH_AREA_Y_SHIFT : 0);
         }
       }
 
@@ -507,10 +560,7 @@ export default function GardenScreen() {
           setFertilizers(updatedGlobalData.fertilizers || 0);
 
           if (totalClaimed > 0) {
-            Alert.alert(
-              "獎勵",
-              `你獲得了 ${totalClaimed} 個肥料！已加入肥料庫存。`,
-            );
+            showRewardToast(`獲得 ${totalClaimed} 個肥料`, "leaf");
           }
         } catch (e) {
           console.error("花園領取待處理獎勵失敗:", e);
@@ -576,6 +626,8 @@ export default function GardenScreen() {
           const spawnedPos =
             positions[spawnedId] || normalizedGardenData.lastSpawnedPosition;
           if (spawnedPlant && spawnedPos) {
+            showRewardToast("發文成功，獲得新植物", "eat1-image");
+
             const worldFocus = getPlantFocusWorldPoint(spawnedPlant);
             const viewportWidth = Math.max(1, gardenAreaLayout.width || width);
             const viewportHeight = Math.max(
@@ -630,7 +682,7 @@ export default function GardenScreen() {
     } finally {
       setLoading(false);
     }
-  }, [applyCamera, plantFocusVisible, sceneContentHeight]);
+  }, [applyCamera, plantFocusVisible, sceneContentHeight, showRewardToast]);
 
   useEffect(() => {
     loadGarden();
@@ -873,11 +925,14 @@ export default function GardenScreen() {
           return;
         }
 
-        const scaleFactor=
+        const scaleFactor =
           distance / Math.max(1, pinchDistanceRef.current || distance);
         const nextScaleRaw = pinchStartScaleRef.current * scaleFactor;
         const minScale = getMinCameraScale();
-        const nextScale = Math.max(minScale, Math.min(nextScaleRaw, MAX_CAMERA_SCALE));
+        const nextScale = Math.max(
+          minScale,
+          Math.min(nextScaleRaw, MAX_CAMERA_SCALE),
+        );
 
         // 如果新的尺度被夾到與目前一樣（已達到極限），不要改變相機位置，避免達邊界時位移
         if (Math.abs(nextScale - (cameraScaleRef.current || 1)) < 1e-6) {
@@ -890,8 +945,10 @@ export default function GardenScreen() {
         const viewportCenter = { x: viewportWidth / 2, y: viewportHeight / 2 };
 
         const currentScale = cameraScaleRef.current || 1;
-        const worldFocusX = (viewportCenter.x - scenePanXRef.current) / currentScale;
-        const worldFocusY = (viewportCenter.y - scenePanYRef.current) / currentScale;
+        const worldFocusX =
+          (viewportCenter.x - scenePanXRef.current) / currentScale;
+        const worldFocusY =
+          (viewportCenter.y - scenePanYRef.current) / currentScale;
 
         const nextPanX = viewportCenter.x - worldFocusX * nextScale;
         const nextPanY = viewportCenter.y - worldFocusY * nextScale;
@@ -948,12 +1005,25 @@ export default function GardenScreen() {
     }
 
     const updatedPlants = (garden.plants || []).map((plant: any) =>
-      plant.id === plantId ? { ...plant, locked: true } : plant,
+      plant.id === plantId
+        ? { ...plant, locked: true, isSeedMoving: false }
+        : plant,
     );
+
+    const adjustedConfirmedPos = {
+      x: confirmedPos.x,
+      y: Math.max(
+        0,
+        Math.min(
+          confirmedPos.y - LOCK_Y_OFFSET_ON_CONFIRM,
+          Math.max(0, sceneContentHeight - PLANT_SIZE),
+        ),
+      ),
+    };
 
     const nextPositions = {
       ...plantPositionsRef.current,
-      [plantId]: confirmedPos,
+      [plantId]: adjustedConfirmedPos,
     };
 
     setGarden({ ...garden, plants: updatedPlants });
@@ -961,7 +1031,7 @@ export default function GardenScreen() {
     setPlantPositions(nextPositions);
     draftPlantPositionsRef.current = {
       ...draftPlantPositionsRef.current,
-      [plantId]: confirmedPos,
+      [plantId]: adjustedConfirmedPos,
     };
     setDraftPlantPositions((prev) => {
       const nextDraft = { ...prev };
@@ -1111,6 +1181,25 @@ export default function GardenScreen() {
   const getPlantStage = (plant: any) => {
     const stages = ["種子", "發芽", "幼苗", "小草", "小花", "花"];
     return stages[getPlantVisualStage(plant)] || "種子";
+  };
+
+  const getPlantCategoryTag = (plant: any) => {
+    const type = typeof plant?.type === "string" ? plant.type : "";
+    const categoryMap: Record<string, string> = {
+      eat1: "飲食",
+      eat2: "飲食",
+      mood1: "其他",
+      mood2: "學業/工作",
+      love1: "人際",
+      love2: "人際",
+      sport1: "運動",
+      sport2: "運動",
+      entertainment1: "娛樂",
+      entertainment2: "娛樂",
+      pet1: "寵物",
+      pet2: "寵物",
+    };
+    return categoryMap[type] || "其他";
   };
 
   const formatPostTime = (time: any) => {
@@ -1335,7 +1424,9 @@ export default function GardenScreen() {
       if (!viewportNode || typeof viewportNode.measureInWindow !== "function") {
         resolve({
           x: Math.max(1, gardenAreaLayout.width || width) / 2,
-          y: Math.max(1, gardenAreaLayout.height || height) / 2,
+          y:
+            Math.max(1, gardenAreaLayout.height || height) / 2 -
+            FOCUS_SCREEN_OFFSET_Y,
         });
         return;
       }
@@ -1349,12 +1440,14 @@ export default function GardenScreen() {
           ) {
             resolve({
               x: Math.max(1, gardenAreaLayout.width || width) / 2,
-              y: Math.max(1, gardenAreaLayout.height || height) / 2,
+              y:
+                Math.max(1, gardenAreaLayout.height || height) / 2 -
+                FOCUS_SCREEN_OFFSET_Y,
             });
             return;
           }
 
-          resolve({ x: x + w / 2, y: y + h / 2 });
+          resolve({ x: x + w / 2, y: y + h / 2 - FOCUS_SCREEN_OFFSET_Y });
         },
       );
     });
@@ -1409,8 +1502,11 @@ export default function GardenScreen() {
       const worldFocus = getPlantFocusWorldPoint(plant);
       const currentScale = cameraScaleRef.current;
 
-      // 計算將 worldFocus 移到 viewport 中心時的 scenePan
-      const viewportCenter = { x: viewportWidth / 2, y: viewportHeight / 2 };
+      // 計算將 worldFocus 移到偏上的視窗中心時的 scenePan
+      const viewportCenter = {
+        x: viewportWidth / 2,
+        y: viewportHeight / 2 - FOCUS_SCREEN_OFFSET_Y,
+      };
       const targetPanX = viewportCenter.x - worldFocus.x * currentScale;
       const targetPanY = viewportCenter.y - worldFocus.y * currentScale;
 
@@ -1703,53 +1799,16 @@ export default function GardenScreen() {
       : getUnlockedZoneCount(sortedPlants.length);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.topBar}>
-        <View style={styles.seedCounter}>
-          <MaterialCommunityIcons name="flower" size={24} color="#4CAF50" />
-          <Text style={styles.seedCountText}>{sortedPlants.length}</Text>
-        </View>
-        <View style={styles.topBarActions}>
-          <TouchableOpacity
-            style={styles.topBarActionButton}
-            onPress={() => router.push("/encyclopedia" as never)}
-            activeOpacity={0.8}
-          >
-            <MaterialCommunityIcons
-              name="book-open-variant"
-              size={22}
-              color="#6D4C41"
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.topBarActionButton}
-            onPress={() => {
-              Alert.alert("清除所有植物", "確定要刪除花園中的所有植物嗎？", [
-                { text: "取消", style: "cancel" },
-                {
-                  text: "確認刪除",
-                  style: "destructive",
-                  onPress: async () => {
-                    try {
-                      await clearAllPlants();
-                      await loadGarden();
-                      Alert.alert("成功", "已清除所有植物");
-                    } catch (e) {
-                      Alert.alert("錯誤", "清除失敗");
-                    }
-                  },
-                },
-              ]);
-            }}
-            activeOpacity={0.8}
-          >
-            <MaterialCommunityIcons
-              name="trash-can-outline"
-              size={22}
-              color="#e53935"
-            />
-          </TouchableOpacity>
+    <View style={[styles.container, isDark && styles.containerDark]}>
+      <View style={[styles.topBar, isDark && styles.topBarDark]}>
+        <View style={[styles.seedCounter, isDark && styles.seedCounterDark]}>
+          <Image
+            source={require("../../assets/plant/day_flower.png")}
+            style={styles.seedCounterImage}
+          />
+          <Text style={[styles.seedCountText, isDark && styles.textWhiteDark]}>
+            {sortedPlants.length}
+          </Text>
         </View>
       </View>
 
@@ -1761,6 +1820,19 @@ export default function GardenScreen() {
         }}
         {...scenePanResponder.panHandlers}
       >
+        <View style={styles.floatingControls}>
+          <TouchableOpacity
+            style={styles.encyclopediaButtonSmall}
+            onPress={() => router.push("/encyclopedia" as never)}
+            activeOpacity={0.8}
+          >
+            <Image
+              source={require("../../assets/images/icon4.png")}
+              style={styles.encyclopediaIcon}
+            />
+          </TouchableOpacity>
+        </View>
+
         <Animated.View
           style={[
             styles.sceneWorld,
@@ -1974,16 +2046,37 @@ export default function GardenScreen() {
         </Animated.View>
       </View>
 
+      {rewardToastVisible ? (
+        <View style={styles.rewardToast}>
+          {rewardToastIcon === "eat1-image" ? (
+            <Image
+              source={require("../../assets/plant/eat1/eat1-1.png")}
+              style={styles.rewardToastImage}
+            />
+          ) : (
+            <MaterialCommunityIcons
+              name={rewardToastIcon as any}
+              size={20}
+              color="#6FA8DC"
+            />
+          )}
+          <Text style={styles.rewardToastText}>{rewardToastText}</Text>
+        </View>
+      ) : null}
+
       <View style={styles.cameraControls} pointerEvents="box-none">
         <TouchableOpacity
-          style={styles.cameraControlButton}
+          style={[
+            styles.cameraControlButton,
+            isDark && styles.cameraControlButtonDark,
+          ]}
           onPress={resetCamera}
           activeOpacity={0.8}
         >
           <MaterialCommunityIcons
             name="crosshairs-gps"
             size={18}
-            color="#1B5E20"
+            color={isDark ? "#FFFFFF" : "#1B5E20"}
           />
         </TouchableOpacity>
       </View>
@@ -1995,30 +2088,42 @@ export default function GardenScreen() {
           <TouchableOpacity
             style={styles.focusBackdrop}
             activeOpacity={1}
-            onPress={closeFocusPanel}
+            onPress={handleFocusBackdropPress}
           />
 
           <View style={styles.focusStage} pointerEvents="box-none">
             <Animated.View
               style={[
                 styles.focusCard,
+                isDark && styles.focusCardDark,
                 {
                   opacity: focusCardOpacity,
                   transform: [{ scale: focusCardScale }],
                 },
               ]}
             >
-              <View style={styles.focusHeader}>
+              <View
+                style={[styles.focusHeader, isDark && styles.focusHeaderDark]}
+              >
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.focusPlantName}>
-                    {selectedPlant.name}
-                  </Text>
-                  <Text style={styles.focusPlantSubtitle}>
-                    {selectedPlant.rarity || "一般"} ・{" "}
-                    {selectedPlant.wiltedAt
-                      ? ""
-                      : getFallbackEmoji(selectedPlant)}
-                  </Text>
+                  <View style={styles.focusTitleRow}>
+                    <Text
+                      style={[
+                        styles.focusPlantName,
+                        isDark && styles.textWhiteDark,
+                      ]}
+                    >
+                      {selectedPlant.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.focusPlantTag,
+                        isDark && styles.focusPlantTagDark,
+                      ]}
+                    >
+                      #{getPlantCategoryTag(selectedPlant)}
+                    </Text>
+                  </View>
                 </View>
 
                 <TouchableOpacity
@@ -2041,46 +2146,115 @@ export default function GardenScreen() {
                 {selectedPlant.wiltedAt ? (
                   <>
                     <View style={styles.plantInfoSection}>
-                      <Text style={styles.infoLabel}>狀態</Text>
-                      <Text style={styles.infoValue}>枯萎</Text>
+                      <Text
+                        style={[
+                          styles.infoLabel,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
+                        狀態
+                      </Text>
+                      <Text
+                        style={[
+                          styles.infoValue,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
+                        枯萎
+                      </Text>
                     </View>
 
                     <View style={styles.plantInfoSection}>
-                      <Text style={styles.infoLabel}>種植日期</Text>
-                      <Text style={styles.infoValue}>
+                      <Text
+                        style={[
+                          styles.infoLabel,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
+                        種植日期
+                      </Text>
+                      <Text
+                        style={[
+                          styles.infoValue,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
                         {formatDateTime(selectedPlant.createdAt)}
                       </Text>
                     </View>
 
                     <View style={styles.plantInfoSection}>
-                      <Text style={styles.infoLabel}>枯萎日期跟時間</Text>
-                      <Text style={styles.infoValue}>
+                      <Text
+                        style={[
+                          styles.infoLabel,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
+                        枯萎日期跟時間
+                      </Text>
+                      <Text
+                        style={[
+                          styles.infoValue,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
                         {formatDateTime(selectedPlant.wiltedAt)}
                       </Text>
                     </View>
 
-                    <View style={styles.extraSection}>
-                      <Text style={styles.infoLabel}>來源貼文</Text>
+                    <TouchableOpacity
+                      style={[styles.extraSection, styles.sourcePostTouchArea]}
+                      activeOpacity={0.85}
+                      onPress={openPlantPostDetail}
+                    >
+                      <Text
+                        style={[
+                          styles.infoLabel,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
+                        來源貼文
+                      </Text>
                       {loadingPost ? (
-                        <Text style={styles.infoValue}>載入中...</Text>
+                        <Text
+                          style={[
+                            styles.infoValue,
+                            isDark && styles.textWhiteDark,
+                          ]}
+                        >
+                          載入中...
+                        </Text>
                       ) : focusedPost ? (
                         <>
                           <Text
-                            style={styles.sourcePostTitle}
+                            style={[
+                              styles.sourcePostTitle,
+                              isDark && styles.textWhiteDark,
+                            ]}
                             numberOfLines={2}
                           >
                             {focusedPost.text || "（沒有文字內容）"}
                           </Text>
-                          <Text style={styles.sourcePostMeta}>
+                          <Text
+                            style={[
+                              styles.sourcePostMeta,
+                              isDark && styles.textWhiteDark,
+                            ]}
+                          >
                             發布日期：{formatDateTime(focusedPost.createdAt)}
                           </Text>
                         </>
                       ) : (
-                        <Text style={styles.sourcePostMeta}>
+                        <Text
+                          style={[
+                            styles.sourcePostMeta,
+                            isDark && styles.textWhiteDark,
+                          ]}
+                        >
                           找不到對應貼文（ID：{selectedPlant.postId || "無"}）
                         </Text>
                       )}
-                    </View>
+                    </TouchableOpacity>
 
                     <View style={styles.deleteOnlyRow}>
                       <TouchableOpacity
@@ -2125,22 +2299,39 @@ export default function GardenScreen() {
                 ) : (
                   <>
                     <View style={styles.plantInfoSection}>
-                      <Text style={styles.infoLabel}>狀態</Text>
-                      <Text style={styles.infoValue}>
+                      <Text
+                        style={[
+                          styles.infoLabel,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
+                        狀態
+                      </Text>
+                      <Text
+                        style={[
+                          styles.infoValue,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
                         {getPlantStage(selectedPlant)}
                       </Text>
                     </View>
 
                     <View style={styles.plantInfoSection}>
-                      <Text style={styles.infoLabel}>回覆數</Text>
-                      <Text style={styles.infoValue}>
-                        {selectedPlant.repliesCount || 0}
+                      <Text
+                        style={[
+                          styles.infoLabel,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
+                        種植日期
                       </Text>
-                    </View>
-
-                    <View style={styles.plantInfoSection}>
-                      <Text style={styles.infoLabel}>種植日期</Text>
-                      <Text style={styles.infoValue}>
+                      <Text
+                        style={[
+                          styles.infoValue,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
                         {new Date(selectedPlant.createdAt).toLocaleDateString(
                           "zh-TW",
                         )}
@@ -2148,66 +2339,104 @@ export default function GardenScreen() {
                     </View>
 
                     <View style={styles.plantInfoSection}>
-                      <Text style={styles.infoLabel}>剩餘生命</Text>
                       <Text
                         style={[
-                          styles.infoValue,
-                          getPlantRemainingLife(selectedPlant) <= 12 &&
-                            styles.lifeWarning,
+                          styles.infoLabel,
+                          isDark && styles.textWhiteDark,
                         ]}
                       >
-                        {getPlantRemainingLife(selectedPlant) === Infinity
-                          ? "永久"
-                          : `${Math.ceil(getPlantRemainingLife(selectedPlant))} 小時`}
+                        剩餘生命
                       </Text>
+                      <View style={styles.infoValueRow}>
+                        <Text
+                          style={[
+                            styles.infoValue,
+                            isDark && styles.textWhiteDark,
+                            getPlantRemainingLife(selectedPlant) <= 12 &&
+                              styles.lifeWarning,
+                          ]}
+                        >
+                          {getPlantRemainingLife(selectedPlant) === Infinity
+                            ? "永久"
+                            : `${Math.ceil(getPlantRemainingLife(selectedPlant))} 小時`}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.inlineWaterButton}
+                          onPress={useWaterDrop}
+                        >
+                          <MaterialCommunityIcons
+                            name="water-outline"
+                            size={16}
+                            color="#444444"
+                          />
+                          <Text style={styles.inlineWaterButtonText}>
+                            澆水 ({waterDrops}/30)
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
 
-                    <View style={styles.extraSection}>
-                      <Text style={styles.infoLabel}>來源貼文</Text>
+                    <TouchableOpacity
+                      style={[styles.extraSection, styles.sourcePostTouchArea]}
+                      activeOpacity={0.85}
+                      onPress={openPlantPostDetail}
+                    >
+                      <Text
+                        style={[
+                          styles.infoLabel,
+                          isDark && styles.textWhiteDark,
+                        ]}
+                      >
+                        來源貼文
+                      </Text>
                       {loadingPost ? (
-                        <Text style={styles.infoValue}>載入中...</Text>
+                        <Text
+                          style={[
+                            styles.infoValue,
+                            isDark && styles.textWhiteDark,
+                          ]}
+                        >
+                          載入中...
+                        </Text>
                       ) : focusedPost ? (
                         <>
                           <Text
-                            style={styles.sourcePostTitle}
+                            style={[
+                              styles.sourcePostTitle,
+                              isDark && styles.textWhiteDark,
+                            ]}
                             numberOfLines={2}
                           >
                             {focusedPost.text || "（沒有文字內容）"}
                           </Text>
-                          <Text style={styles.sourcePostMeta}>
-                            發布日期：{formatPostTime(focusedPost.createdAt)}
-                          </Text>
-                          <Text style={styles.sourcePostMeta}>
-                            標籤：{focusedPost.tag || "未設定"}
-                          </Text>
-                          <Text style={styles.sourcePostMeta}>
-                            讚數：{focusedPost.likes || 0} ・ 留言：
-                            {(focusedPost.comments || []).length}
+                          <Text
+                            style={[
+                              styles.sourcePostMeta,
+                              isDark && styles.textWhiteDark,
+                            ]}
+                          >
+                            發布日期：{formatDateTime(focusedPost.createdAt)}
                           </Text>
                         </>
                       ) : (
-                        <Text style={styles.sourcePostMeta}>
+                        <Text
+                          style={[
+                            styles.sourcePostMeta,
+                            isDark && styles.textWhiteDark,
+                          ]}
+                        >
                           找不到對應貼文（ID：{selectedPlant.postId || "無"}）
                         </Text>
                       )}
-                    </View>
+                    </TouchableOpacity>
 
-                    <View style={styles.extraSection}>
-                      <Text style={styles.infoLabel}>成長歷程</Text>
-                      {getGrowthHistory(selectedPlant).map((item, idx) => (
-                        <View
-                          key={`${selectedPlant.id}_timeline_${idx}`}
-                          style={styles.timelineRow}
-                        >
-                          <View style={styles.timelineDot} />
-                          <Text style={styles.timelineText}>{item}</Text>
-                        </View>
-                      ))}
-                    </View>
-
-                    <View style={styles.actionRowInFocus}>
+                    <View style={styles.tripleActionRow}>
                       <TouchableOpacity
-                        style={styles.moveButton}
+                        style={[
+                          styles.actionButton,
+                          styles.tripleActionButton,
+                          styles.moveButton,
+                        ]}
                         onPress={async () => {
                           if (!selectedPlant) return;
                           const movePlantId = selectedPlant.id;
@@ -2215,11 +2444,28 @@ export default function GardenScreen() {
                           await handleUnlockPlant(movePlantId);
                         }}
                       >
-                        <Text style={styles.moveButtonText}>移動植物</Text>
+                        <Text style={styles.actionButtonText}>移動</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        style={styles.deleteButton}
+                        style={[
+                          styles.actionButton,
+                          styles.tripleActionButton,
+                          styles.fertilizerButton,
+                        ]}
+                        onPress={useFertilizer}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          施肥 ({fertilizers}/30)
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.actionButton,
+                          styles.tripleActionButton,
+                          styles.deleteButton,
+                        ]}
                         onPress={() => {
                           Alert.alert("確認", "確定要刪除此植物嗎？", [
                             { text: "取消", style: "cancel" },
@@ -2248,42 +2494,7 @@ export default function GardenScreen() {
                           ]);
                         }}
                       >
-                        <MaterialCommunityIcons
-                          name="trash-can-outline"
-                          size={18}
-                          color="#fff"
-                        />
-                        <Text style={styles.deleteButtonText}>刪除植物</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.actionRowInFocus}>
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.waterDropButton]}
-                        onPress={useWaterDrop}
-                      >
-                        <MaterialCommunityIcons
-                          name="water-outline"
-                          size={18}
-                          color="#fff"
-                        />
-                        <Text style={styles.actionButtonText}>
-                          澆水 ({waterDrops}/30)
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.fertilizerButton]}
-                        onPress={useFertilizer}
-                      >
-                        <MaterialCommunityIcons
-                          name="leaf"
-                          size={18}
-                          color="#fff"
-                        />
-                        <Text style={styles.actionButtonText}>
-                          施肥 ({fertilizers}/30)
-                        </Text>
+                        <Text style={styles.actionButtonText}>刪除</Text>
                       </TouchableOpacity>
                     </View>
                   </>
@@ -2293,6 +2504,18 @@ export default function GardenScreen() {
           </View>
         </Animated.View>
       )}
+
+      <PostDetailModal
+        visible={postDetailVisible}
+        post={focusedPost}
+        isDark={isDark}
+        onClose={() => setPostDetailVisible(false)}
+        currentUserId=""
+        profileMap={{}}
+        sortedComments={focusedPost?.comments || []}
+        commentSortMode="new"
+        showCommentInput={false}
+      />
     </View>
   );
 }
@@ -2301,6 +2524,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#eeeeee",
+  },
+  containerDark: {
+    backgroundColor: "#202624",
   },
   sceneViewport: {
     left: 0,
@@ -2315,7 +2541,7 @@ const styles = StyleSheet.create({
   },
   topBar: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     alignItems: "center",
     paddingHorizontal: 16,
     paddingTop: 60,
@@ -2325,32 +2551,52 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E0E0E0",
     zIndex: 1000,
   },
-  topBarActions: {
+  topBarDark: {
+    backgroundColor: "#39443E",
+    borderBottomColor: "#39443E",
+  },
+  floatingControls: {
+    position: "absolute",
+    top: 16,
+    left: 16,
     flexDirection: "row",
     alignItems: "center",
+    zIndex: 30,
   },
-  topBarActionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  encyclopediaButtonSmall: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    marginLeft: 10,
+    backgroundColor: "rgba(255, 255, 255, 0)",
+    top: 5,
+  },
+  encyclopediaIcon: {
+    width: 55,
+    height: 55,
+    resizeMode: "contain",
   },
   seedCounter: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#eeeeee",
+    backgroundColor: "#C1946D",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
+  },
+  seedCounterDark: {
+    backgroundColor: "#9FA7A2",
+  },
+  seedCounterImage: {
+    width: 20,
+    height: 20,
   },
   seedCountText: {
     marginLeft: 6,
     fontSize: 18,
     fontWeight: "700",
-    color: "#2E7D32",
+    color: "#FFFFFF",
   },
   title: {
     fontSize: 20,
@@ -2406,9 +2652,8 @@ const styles = StyleSheet.create({
     top: (PLANT_SIZE - 30) / 2 + 30,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 180, 255, 0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(0, 180, 255, 0.7)",
+    backgroundColor: "transparent",
+    borderWidth: 0,
     borderRadius: 8,
   },
   dragTouchArea: {
@@ -2419,9 +2664,8 @@ const styles = StyleSheet.create({
     top: (PLANT_SIZE - 30) / 2 + 30,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(255, 120, 0, 0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 120, 0, 0.7)",
+    backgroundColor: "transparent",
+    borderWidth: 0,
     borderRadius: 8,
   },
   draggablePlant: {
@@ -2477,6 +2721,39 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
+  rewardToast: {
+    position: "absolute",
+    top: 150,
+    left: 50,
+    right: 50,
+    zIndex: 1700,
+    elevation: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#d5e6c7",
+    borderRadius: 999,
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+  },
+  rewardToastText: {
+    marginLeft: 7,
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#464646",
+  },
+  rewardToastImage: {
+    width: 24,
+    height: 24,
+    resizeMode: "contain",
+  },
   focusOverlay: {
     position: "absolute",
     top: 0,
@@ -2503,8 +2780,8 @@ const styles = StyleSheet.create({
   focusCard: {
     width: "100%",
     maxWidth: 760,
-    maxHeight: "30%",
-    backgroundColor: "rgba(246, 251, 245, 0.97)",
+    maxHeight: "43%",
+    backgroundColor: "rgba(246, 251, 245, 0.8)",
     borderRadius: 24,
     overflow: "hidden",
     borderWidth: 1,
@@ -2514,6 +2791,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     shadowRadius: 24,
     elevation: 8,
+  },
+  focusCardDark: {
+    backgroundColor: "rgba(71, 95, 75, 0.75)",
+    borderColor: "#475F4B",
   },
   focusHeader: {
     flexDirection: "row",
@@ -2525,10 +2806,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#D7E8D5",
   },
+  focusHeaderDark: {
+    borderBottomColor: "#5A6C60",
+  },
   focusPlantName: {
     fontSize: 28,
     fontWeight: "800",
     color: "#1B5E20",
+  },
+  focusTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  focusPlantTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: "#B1D497",
+    marginTop: 2,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  focusPlantTagDark: {
+    backgroundColor: "#475f4b",
   },
   focusPlantSubtitle: {
     marginTop: 4,
@@ -2546,15 +2848,15 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   focusScroll: {
-    maxHeight: 220,
+    maxHeight: 430,
   },
   focusDetailContent: {
-    padding: 18,
-    paddingBottom: 22,
+    padding: 10,
+    paddingBottom: 12,
   },
   plantInfoSection: {
-    marginBottom: 16,
-    paddingBottom: 12,
+    marginBottom: 10,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
   },
@@ -2569,14 +2871,40 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1B5E20",
   },
+  infoValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  inlineWaterButton: {
+    borderRadius: 8,
+    backgroundColor: "#D0E7EF",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+  },
+  inlineWaterButtonText: {
+    color: "#444444",
+    fontWeight: "700",
+    fontSize: 12,
+  },
   lifeWarning: {
     color: "#D32F2F",
   },
   extraSection: {
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "rgba(111, 168, 220, 0.9)",
+    backgroundColor: "rgba(111, 168, 220, 0.10)",
+  },
+  sourcePostTouchArea: {
+    alignSelf: "stretch",
   },
   sourcePostTitle: {
     fontSize: 15,
@@ -2618,9 +2946,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   moveButton: {
-    backgroundColor: "#4CAF50",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    backgroundColor: "#6FAF7A",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     borderRadius: 10,
   },
   moveButtonText: {
@@ -2632,34 +2960,46 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     borderRadius: 10,
-    backgroundColor: "#D84315",
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    backgroundColor: "#E07A7A",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 6,
   },
   deleteButtonText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
   actionButton: {
     flex: 1,
     borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 6,
   },
+  tripleActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  tripleActionButton: {
+    flex: 1,
+    marginLeft: 0,
+    marginRight: 0,
+    height: 40,
+  },
   waterDropButton: {
-    backgroundColor: "#2196F3",
+    backgroundColor: "#D0E7EF",
     marginRight: 8,
   },
   fertilizerButton: {
-    backgroundColor: "#FF9800",
+    backgroundColor: "#D39B5E",
     marginLeft: 8,
   },
   actionButtonText: {
@@ -2695,11 +3035,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.95)",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(27,94,32,0.25)",
     shadowColor: "#000",
     shadowOpacity: 0.18,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
+  },
+  cameraControlButtonDark: {
+    backgroundColor: "#475F4B",
+  },
+  textWhiteDark: {
+    color: "#FFFFFF",
   },
 });

@@ -11,11 +11,14 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { PLANT_CATALOG } from "../utils/plantCatalog";
+import { useColorScheme } from "../components/useColorScheme";
+import { PLANT_CATALOG, TAG_TO_VARIANTS } from "../utils/plantCatalog";
 import { getGarden } from "../utils/storage";
 
 export default function EncyclopediaScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
   const { width } = useWindowDimensions();
   const [garden, setGarden] = useState<{ plants?: any[] } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,7 +49,15 @@ export default function EncyclopediaScreen() {
   }, []);
 
   const unlockedTypes = useMemo(() => {
-    return new Set((garden?.plants || []).map((plant: any) => plant.type));
+    return new Set(
+      (garden?.plants || [])
+        .filter((plant: any) => {
+          const imageIndex =
+            typeof plant?.imageIndex === "number" ? plant.imageIndex : -1;
+          return imageIndex <= -6;
+        })
+        .map((plant: any) => plant.type),
+    );
   }, [garden?.plants]);
 
   const columns = width >= 900 ? 3 : 2;
@@ -58,20 +69,26 @@ export default function EncyclopediaScreen() {
   ).length;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, isDark && styles.containerDark]}>
+      <View style={[styles.header, isDark && styles.headerDark]}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>圖鑑</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, isDark && styles.textWhiteDark]}>
+            圖鑑
+          </Text>
+          <Text style={[styles.subtitle, isDark && styles.subtitleDark]}>
             已解鎖 {unlockedCount} / {PLANT_CATALOG.length} 種植物
           </Text>
         </View>
 
         <TouchableOpacity
-          style={styles.closeButton}
+          style={[styles.closeButton, isDark && styles.closeButtonDark]}
           onPress={() => router.back()}
         >
-          <MaterialCommunityIcons name="close" size={22} color="#4E342E" />
+          <MaterialCommunityIcons
+            name="close"
+            size={22}
+            color={isDark ? "#FFFFFF" : "#4E342E"}
+          />
         </TouchableOpacity>
       </View>
 
@@ -82,47 +99,96 @@ export default function EncyclopediaScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.grid}>
-            {PLANT_CATALOG.map((plant) => {
-              const unlocked = unlockedTypes.has(plant.type);
+          <View style={styles.categoryList}>
+            {Object.entries(TAG_TO_VARIANTS).map(([tag, variants]) => {
+              const types = Array.from(new Set(variants));
+              const isSingle = types.length === 1;
+              const itemWidth = isSingle ? width - 32 : (width - 32 - 12) / 2;
+
               return (
-                <View
-                  key={plant.type}
-                  style={[styles.card, { width: cardWidth }]}
-                >
-                  <View
+                <View key={tag} style={styles.categoryRow}>
+                  <Text
                     style={[
-                      styles.imageFrame,
-                      unlocked ? styles.unlockedFrame : styles.lockedFrame,
+                      styles.categoryTitle,
+                      isDark && styles.textWhiteDark,
                     ]}
                   >
-                    <Image
-                      source={
-                        unlocked ? plant.bloomImage : plant.silhouetteImage
-                      }
-                      style={[
-                        styles.image,
-                        unlocked ? styles.unlockedImage : styles.lockedImage,
-                      ]}
-                      resizeMode="contain"
-                    />
-
-                    {!unlocked && (
-                      <View style={styles.lockBadge}>
-                        <MaterialCommunityIcons
-                          name="lock"
-                          size={14}
-                          color="#fff"
-                        />
-                        <Text style={styles.lockBadgeText}>未解鎖</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <Text style={styles.plantName}>{plant.name}</Text>
-                  <Text style={styles.plantState}>
-                    {unlocked ? "已解鎖" : "尚未解鎖"}
+                    {tag}
                   </Text>
+                  <View style={styles.categoryItems}>
+                    {types.map((type) => {
+                      const plant = PLANT_CATALOG.find((p) => p.type === type);
+                      if (!plant) return null;
+                      const unlocked = unlockedTypes.has(type);
+
+                      return (
+                        <View
+                          key={type}
+                          style={[
+                            styles.card,
+                            { width: itemWidth },
+                            isDark && styles.cardDark,
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.imageFrame,
+                              unlocked
+                                ? styles.unlockedFrame
+                                : styles.lockedFrame,
+                              isDark &&
+                                (unlocked
+                                  ? styles.unlockedFrameDark
+                                  : styles.lockedFrameDark),
+                            ]}
+                          >
+                            <Image
+                              source={
+                                unlocked
+                                  ? plant.bloomImage
+                                  : plant.silhouetteImage
+                              }
+                              style={[
+                                styles.image,
+                                unlocked
+                                  ? styles.unlockedImage
+                                  : styles.lockedImage,
+                              ]}
+                              resizeMode="contain"
+                            />
+
+                            {!unlocked && (
+                              <View style={styles.lockBadge}>
+                                <MaterialCommunityIcons
+                                  name="lock"
+                                  size={14}
+                                  color="#fff"
+                                />
+                                <Text style={styles.lockBadgeText}>未解鎖</Text>
+                              </View>
+                            )}
+                          </View>
+
+                          <Text
+                            style={[
+                              styles.plantName,
+                              isDark && styles.textWhiteDark,
+                            ]}
+                          >
+                            {unlocked ? plant.name : "???"}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.plantState,
+                              isDark && styles.subtitleDark,
+                            ]}
+                          >
+                            {unlocked ? "已解鎖" : "尚未解鎖"}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
                 </View>
               );
             })}
@@ -138,6 +204,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F5EFE6",
   },
+  containerDark: {
+    backgroundColor: "#202624",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -149,6 +218,9 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(109, 76, 65, 0.12)",
     backgroundColor: "rgba(255,255,255,0.6)",
   },
+  headerDark: {
+    backgroundColor: "#39443E",
+  },
   title: {
     fontSize: 28,
     fontWeight: "800",
@@ -159,6 +231,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#7A6A5F",
   },
+  subtitleDark: {
+    color: "#B5B5B6",
+  },
   closeButton: {
     width: 40,
     height: 40,
@@ -166,6 +241,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.95)",
+  },
+  closeButtonDark: {
+    backgroundColor: "#39443E",
   },
   loadingContainer: {
     flex: 1,
@@ -180,6 +258,23 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     paddingBottom: 24,
+  },
+  categoryList: {
+    gap: 18,
+  },
+  categoryRow: {
+    marginBottom: 18,
+  },
+  categoryTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#4E342E",
+    marginBottom: 8,
+  },
+  categoryItems: {
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "flex-start",
   },
   grid: {
     flexDirection: "row",
@@ -199,6 +294,9 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
   },
+  cardDark: {
+    backgroundColor: "#39443E",
+  },
   imageFrame: {
     height: 170,
     borderRadius: 16,
@@ -210,8 +308,14 @@ const styles = StyleSheet.create({
   unlockedFrame: {
     backgroundColor: "#FFF8E7",
   },
+  unlockedFrameDark: {
+    backgroundColor: "#9FA7A2",
+  },
   lockedFrame: {
     backgroundColor: "#ECE7E1",
+  },
+  lockedFrameDark: {
+    backgroundColor: "#8b918d",
   },
   image: {
     width: "88%",
@@ -250,5 +354,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     color: "#7A6A5F",
+  },
+  textWhiteDark: {
+    color: "#FFFFFF",
   },
 });

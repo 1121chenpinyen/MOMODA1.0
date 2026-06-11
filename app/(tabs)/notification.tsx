@@ -31,12 +31,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import PostDetailModal from "../../components/PostDetailModal";
+import { useColorScheme } from "../../components/useColorScheme";
 import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
 import {
   getGarden,
   getGlobalData,
-  updateGlobalData
+  updateGlobalData,
 } from "../../utils/storage";
 
 const READ_NOTIFICATIONS_STORAGE_KEY = "read_notification_ids";
@@ -114,6 +115,8 @@ function renderAvatar(avatar?: string, size: number = 44) {
 }
 
 export default function NotificationPage() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
   const [deviceId, setDeviceId] = useState<string>("");
 
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -157,11 +160,11 @@ export default function NotificationPage() {
   const [isSendingComment, setIsSendingComment] = useState(false);
 
   const isSendingCommentRef = useRef(false);
-  const [waterDropToastVisible, setWaterDropToastVisible] =
-    useState(false);
+  const [waterDropToastVisible, setWaterDropToastVisible] = useState(false);
 
-  const waterDropToastTimerRef =
-    useRef<ReturnType<typeof setTimeout> | null>(null);
+  const waterDropToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const showWaterDropToast = () => {
     setWaterDropToastVisible(true);
@@ -756,23 +759,32 @@ export default function NotificationPage() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <View style={styles.container}>
+    <SafeAreaView
+      style={[styles.safeArea, isDark && styles.safeAreaDark]}
+      edges={["top"]}
+    >
+      <View style={[styles.container, isDark && styles.containerDark]}>
         <View style={styles.header}>
-          <Text style={styles.title}>通知</Text>
+          <Text style={[styles.title, isDark && styles.textWhiteDark]}>
+            通知
+          </Text>
         </View>
 
         {loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color="#B1D497" />
 
-            <Text style={styles.loadingText}>讀取中...</Text>
+            <Text style={[styles.loadingText, isDark && styles.textWhiteDark]}>
+              讀取中...
+            </Text>
           </View>
         ) : notifications.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyTitle}>暫時沒有新的留言通知</Text>
+            <Text style={[styles.emptyTitle, isDark && styles.textWhiteDark]}>
+              暫時沒有新的留言通知
+            </Text>
 
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyText, isDark && styles.textWhiteDark]}>
               當你發出的貼文有新的留言時，這裡會顯示出來。
             </Text>
           </View>
@@ -782,12 +794,16 @@ export default function NotificationPage() {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.notificationsCard}>
+            <View
+              style={[
+                styles.notificationsCard,
+                isDark && styles.notificationsCardDark,
+              ]}
+            >
               {notifications.map((item, index) => {
                 const isRead = readNotificationIds.includes(item.id);
 
-                const isLastItem =
-                  index === notifications.length - 1;
+                const isLastItem = index === notifications.length - 1;
 
                 return (
                   <Pressable
@@ -799,31 +815,39 @@ export default function NotificationPage() {
                         ? styles.readNotificationRow
                         : styles.unreadNotificationRow,
 
-                      !isLastItem &&
-                        styles.notificationRowDivider,
+                      isDark &&
+                        (isRead
+                          ? styles.readNotificationRowDark
+                          : styles.unreadNotificationRowDark),
+
+                      !isLastItem && styles.notificationRowDivider,
                     ]}
                     onPress={() => {
                       openPostDetail(item.id, item.post);
                     }}
                   >
                     <View style={styles.leftColumn}>
-                      {renderAvatar(
-                        item.comment.userAvatar,
-                        48,
-                      )}
+                      {renderAvatar(item.comment.userAvatar, 48)}
                     </View>
 
                     <View style={styles.bodyColumn}>
                       <View style={styles.nameRow}>
                         <Text
-                          style={styles.userName}
+                          style={[
+                            styles.userName,
+                            isDark && styles.textWhiteDark,
+                          ]}
                           numberOfLines={1}
                         >
-                          {item.comment.userName ||
-                            "匿名小夥伴"}
+                          {item.comment.userName || "匿名小夥伴"}
                         </Text>
 
-                        <Text style={styles.commentLabel}>
+                        <Text
+                          style={[
+                            styles.commentLabel,
+                            isDark && styles.textWhiteDark,
+                          ]}
+                        >
                           {" "}
                           在你的貼文留言：
                         </Text>
@@ -831,7 +855,10 @@ export default function NotificationPage() {
 
                       <View style={styles.commentRow}>
                         <Text
-                          style={styles.commentText}
+                          style={[
+                            styles.commentText,
+                            isDark && styles.textWhiteDark,
+                          ]}
                           numberOfLines={1}
                           ellipsizeMode="tail"
                         >
@@ -839,9 +866,7 @@ export default function NotificationPage() {
                         </Text>
 
                         <Text style={styles.timeText}>
-                          {formatTime(
-                            item.comment.createdAt,
-                          )}
+                          {formatTime(item.comment.createdAt)}
                         </Text>
                       </View>
                     </View>
@@ -864,6 +889,7 @@ export default function NotificationPage() {
         <PostDetailModal
           visible={detailVisible}
           post={selectedPost}
+          isDark={isDark}
           targetCommentId={targetCommentId}
           onClose={closePostDetail}
           currentUserId={deviceId}
@@ -903,11 +929,17 @@ export default function NotificationPage() {
                 </View>
               ) : null}
 
-              <View style={styles.commentInputBar}>
+              <View
+                style={[
+                  styles.commentInputBar,
+                  isDark && styles.commentInputBarDark,
+                ]}
+              >
                 <View style={styles.commentInputActions}>
                   <TouchableOpacity
                     style={[
                       styles.commentActionBtn,
+                      isDark && styles.commentActionBtnDark,
 
                       isSendingComment && styles.commentActionBtnDisabled,
                     ]}
@@ -924,6 +956,7 @@ export default function NotificationPage() {
                   <TouchableOpacity
                     style={[
                       styles.commentActionBtn,
+                      isDark && styles.commentActionBtnDark,
 
                       isSendingComment && styles.commentActionBtnDisabled,
                     ]}
@@ -941,13 +974,14 @@ export default function NotificationPage() {
                 <TextInput
                   style={[
                     styles.commentInputInPage,
+                    isDark && styles.commentInputInPageDark,
 
                     isSendingComment && styles.commentInputDisabled,
                   ]}
                   placeholder={
                     isSendingComment ? "留言發送中..." : "輸入你的留言..."
                   }
-                  placeholderTextColor="#aaaaaa"
+                  placeholderTextColor={isDark ? "#7A746E" : "#aaaaaa"}
                   value={commentText}
                   onChangeText={setCommentText}
                   editable={!isSendingComment}
@@ -956,6 +990,7 @@ export default function NotificationPage() {
                 <TouchableOpacity
                   style={[
                     styles.sendCommentBtn,
+                    isDark && styles.sendCommentBtnDark,
 
                     isSendingComment && styles.sendCommentBtnDisabled,
                   ]}
@@ -983,10 +1018,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#F7F3EC",
   },
 
+  safeAreaDark: {
+    backgroundColor: "#202624",
+  },
+
   container: {
     flex: 1,
     paddingHorizontal: 16,
     backgroundColor: "#f7f3ec",
+  },
+
+  containerDark: {
+    backgroundColor: "#202624",
   },
 
   header: {
@@ -1060,6 +1103,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
+  notificationsCardDark: {
+    backgroundColor: "#202624",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+
   notificationRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1076,8 +1125,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#eaf3e1",
   },
 
+  unreadNotificationRowDark: {
+    backgroundColor: "#313B37",
+  },
+
   readNotificationRow: {
     backgroundColor: "#ffffff",
+  },
+
+  readNotificationRowDark: {
+    backgroundColor: "#9FA7A2",
   },
 
   leftColumn: {
@@ -1127,6 +1184,10 @@ const styles = StyleSheet.create({
     color: "#777",
   },
 
+  textWhiteDark: {
+    color: "#FFFFFF",
+  },
+
   commentImage: {
     width: 56,
     height: 56,
@@ -1148,6 +1209,11 @@ const styles = StyleSheet.create({
     borderTopColor: "#eeeeee",
   },
 
+  commentInputBarDark: {
+    backgroundColor: "#313B37",
+    borderTopColor: "#313B37",
+  },
+
   commentInputActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -1162,6 +1228,10 @@ const styles = StyleSheet.create({
     marginRight: 8,
     backgroundColor: "#F0F4EC",
     borderRadius: 21,
+  },
+
+  commentActionBtnDark: {
+    backgroundColor: "#39443E",
   },
 
   commentActionBtnDisabled: {
@@ -1197,6 +1267,11 @@ const styles = StyleSheet.create({
     color: "#333333",
   },
 
+  commentInputInPageDark: {
+    backgroundColor: "#9FA7A2",
+    color: "#7A746E",
+  },
+
   commentInputDisabled: {
     backgroundColor: "#eeeeee",
     color: "#999999",
@@ -1210,6 +1285,10 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     backgroundColor: "#B1D497",
     borderRadius: 21,
+  },
+
+  sendCommentBtnDark: {
+    backgroundColor: "#A8D18D",
   },
 
   sendCommentBtnDisabled: {

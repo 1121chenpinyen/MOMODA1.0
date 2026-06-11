@@ -34,16 +34,18 @@ import {
 
 import PostDetailModal from "../../components/PostDetailModal";
 import { db, storage } from "../../config/firebaseConfig";
+import { useThemeMode } from "../../context/themeContext";
 import { getDeviceId } from "../../utils/getDeviceId";
 import {
   getGarden,
   getGlobalData,
-  updateGlobalData
+  updateGlobalData,
 } from "../../utils/storage";
 
 const { width } = Dimensions.get("window");
 
 export default function ProfilePage() {
+  const { isDark, toggleTheme } = useThemeMode();
   const [avatar, setAvatar] = useState<string | null>(null);
 
   /*
@@ -102,7 +104,7 @@ export default function ProfilePage() {
   const [isSendingComment, setIsSendingComment] = useState(false);
 
   const isSendingCommentRef = useRef(false);
-  
+
   // 數據統計狀態
   const [stats, setStats] = useState({
     sentPosts: 0,
@@ -116,6 +118,25 @@ export default function ProfilePage() {
     sentComments: 0,
     receivedComments: 0,
   });
+
+  const palette = useMemo(
+    () => ({
+      background: isDark ? "#202624" : "#F7F3EC",
+      card: isDark ? "#39443E" : "#FFFFFF",
+      header: isDark ? "#131A21" : "#F7F3EC",
+      textPrimary: isDark ? "#FFFFFF" : "#1E1E1E",
+      textSecondary: isDark ? "#3E3A36" : "#666666",
+      border: isDark ? "#2A3440" : "#E8DCCF",
+      buttonBg: isDark ? "#FFFFFF" : "#FFFFFF",
+      themeToggleBg: isDark ? "#FFFFFF" : "#39443E",
+      buttonIcon: isDark ? "#202624" : "#999999",
+      themeToggleIcon: isDark ? "#202624" : "#FFFFFF",
+      statCard: isDark ? "#9FA7A2" : "#F0F4EC",
+      textSecondary_1: isDark ? "#B5B5B6" : "#999999",
+      accent: isDark ? "#ffffff" : "#3E3A36",
+    }),
+    [isDark],
+  );
 
   const sentPostsSlideAnim = useRef(new Animated.Value(0)).current;
 
@@ -711,8 +732,6 @@ export default function ProfilePage() {
         console.error("更新花園成長失敗:", gardenError);
       }
 
-      
-
       const updatedPost = {
         ...selectedPostDetail,
         comments: updatedComments,
@@ -1134,14 +1153,28 @@ export default function ProfilePage() {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: palette.background }]}
       contentContainerStyle={styles.containerContent}
     >
-      <View style={styles.topSection} />
+      <View style={[styles.topSection, { backgroundColor: palette.header }]}>
+        <TouchableOpacity
+          style={[
+            styles.themeToggleButton,
+            { backgroundColor: palette.themeToggleBg },
+          ]}
+          onPress={toggleTheme}
+        >
+          <Ionicons
+            name={isDark ? "sunny-outline" : "moon-outline"}
+            size={20}
+            color={palette.themeToggleIcon}
+          />
+        </TouchableOpacity>
+      </View>
 
-      <View style={styles.contentCard}>
+      <View style={[styles.contentCard, { backgroundColor: palette.card }]}>
         {/* 頭像區域 */}
-        <View style={styles.avatarWrapper}>
+        <View style={[styles.avatarWrapper, { backgroundColor: palette.card }]}>
           <Image
             source={
               avatar
@@ -1166,29 +1199,33 @@ export default function ProfilePage() {
           <View style={styles.centerNameArea}>
             {editingId ? (
               <TextInput
-                style={styles.nameInput}
+                style={[styles.nameInput, { color: palette.textPrimary }]}
                 value={tempId}
                 onChangeText={setTempId}
                 onBlur={() => saveId(tempId)}
                 autoFocus
               />
             ) : (
-              <Text style={styles.nameText}>{userId}</Text>
+              <Text style={[styles.nameText, { color: palette.textPrimary }]}>
+                {userId}
+              </Text>
             )}
           </View>
 
           <TouchableOpacity
-            style={styles.editButton}
+            style={[styles.editButton, { backgroundColor: palette.buttonBg }]}
             onPress={() => setEditingId(true)}
           >
-            <MaterialIcons name="edit" size={18} color="#999999" />
+            <MaterialIcons name="edit" size={18} color={palette.buttonIcon} />
           </TouchableOpacity>
         </View>
 
         {/* 統計數字 */}
-        <View style={styles.statBox}>
+        <View style={[styles.statBox, { backgroundColor: palette.statCard }]}>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>貼文</Text>
+            <Text style={[styles.statLabel, { color: palette.textSecondary }]}>
+              貼文
+            </Text>
 
             <View style={styles.statValueContainer}>
               <Animated.View
@@ -1203,15 +1240,25 @@ export default function ProfilePage() {
                   },
                 ]}
               >
-                <Text style={styles.statValue}>{prevStats.sentPosts}</Text>
+                <Text
+                  style={[styles.statValue, { color: palette.textPrimary }]}
+                >
+                  {prevStats.sentPosts}
+                </Text>
 
-                <Text style={styles.statValue}>{stats.sentPosts}</Text>
+                <Text
+                  style={[styles.statValue, { color: palette.textPrimary }]}
+                >
+                  {stats.sentPosts}
+                </Text>
               </Animated.View>
             </View>
           </View>
 
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>給出回覆</Text>
+            <Text style={[styles.statLabel, { color: palette.textSecondary }]}>
+              給出回覆
+            </Text>
 
             <View style={styles.statValueContainer}>
               <Animated.View
@@ -1226,15 +1273,25 @@ export default function ProfilePage() {
                   },
                 ]}
               >
-                <Text style={styles.statValue}>{prevStats.sentComments}</Text>
+                <Text
+                  style={[styles.statValue, { color: palette.textPrimary }]}
+                >
+                  {prevStats.sentComments}
+                </Text>
 
-                <Text style={styles.statValue}>{stats.sentComments}</Text>
+                <Text
+                  style={[styles.statValue, { color: palette.textPrimary }]}
+                >
+                  {stats.sentComments}
+                </Text>
               </Animated.View>
             </View>
           </View>
 
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>收到回覆</Text>
+            <Text style={[styles.statLabel, { color: palette.textSecondary }]}>
+              收到回覆
+            </Text>
 
             <View style={styles.statValueContainer}>
               <Animated.View
@@ -1249,11 +1306,17 @@ export default function ProfilePage() {
                   },
                 ]}
               >
-                <Text style={styles.statValue}>
+                <Text
+                  style={[styles.statValue, { color: palette.textPrimary }]}
+                >
                   {prevStats.receivedComments}
                 </Text>
 
-                <Text style={styles.statValue}>{stats.receivedComments}</Text>
+                <Text
+                  style={[styles.statValue, { color: palette.textPrimary }]}
+                >
+                  {stats.receivedComments}
+                </Text>
               </Animated.View>
             </View>
           </View>
@@ -1261,13 +1324,13 @@ export default function ProfilePage() {
 
         {/* 貼文頁與收藏頁 */}
         <View
-          style={styles.sectionTabs}
+          style={[styles.sectionTabs]}
           onLayout={(event) => {
             setSectionTabsWidth(event.nativeEvent.layout.width);
           }}
         >
           <TouchableOpacity
-            style={styles.sectionTab}
+            style={[styles.sectionTab]}
             activeOpacity={0.7}
             onPress={() => {
               setActiveSection("posts");
@@ -1276,7 +1339,11 @@ export default function ProfilePage() {
             <Text
               style={[
                 styles.sectionTabText,
-                activeSection === "posts" && styles.sectionTabTextActive,
+                { color: palette.textSecondary_1 },
+                activeSection === "posts" && {
+                  color: palette.textPrimary,
+                  fontWeight: "700",
+                },
               ]}
             >
               貼文頁
@@ -1293,7 +1360,11 @@ export default function ProfilePage() {
             <Text
               style={[
                 styles.sectionTabText,
-                activeSection === "favorites" && styles.sectionTabTextActive,
+                { color: palette.textSecondary_1 },
+                activeSection === "favorites" && {
+                  color: palette.textPrimary,
+                  fontWeight: "700",
+                },
               ]}
             >
               收藏頁
@@ -1312,6 +1383,7 @@ export default function ProfilePage() {
                       translateX: sectionUnderlineTranslateX,
                     },
                   ],
+                  backgroundColor: palette.accent,
                 },
               ]}
             />
@@ -1324,7 +1396,9 @@ export default function ProfilePage() {
               <TouchableOpacity
                 style={[
                   styles.viewTab,
+                  isDark && styles.viewTabDark,
                   postViewMode === "time" && styles.viewTabActive,
+                  isDark && postViewMode === "time" && styles.viewTabActiveDark,
                 ]}
                 onPress={() => {
                   setPostViewMode("time");
@@ -1343,7 +1417,11 @@ export default function ProfilePage() {
               <TouchableOpacity
                 style={[
                   styles.viewTab,
+                  isDark && styles.viewTabDark,
                   postViewMode === "calendar" && styles.viewTabActive,
+                  isDark &&
+                    postViewMode === "calendar" &&
+                    styles.viewTabActiveDark,
                 ]}
                 onPress={() => {
                   setPostViewMode("calendar");
@@ -1361,7 +1439,7 @@ export default function ProfilePage() {
             </View>
 
             {postViewMode === "time" ? (
-              <View style={styles.listCard}>
+              <View style={[styles.listCard, isDark && styles.listCardDark]}>
                 {myPosts.length === 0 ? (
                   <Text style={styles.emptyText}>目前沒有貼文</Text>
                 ) : (
@@ -1397,7 +1475,13 @@ export default function ProfilePage() {
                           />
 
                           <View style={styles.postRowAuthorInfo}>
-                            <Text style={styles.postRowName} numberOfLines={1}>
+                            <Text
+                              style={[
+                                styles.postRowName,
+                                isDark && { color: "#FFFFFF" },
+                              ]}
+                              numberOfLines={1}
+                            >
                               {profileMap[post.authorId || post.deviceId]
                                 ?.name ||
                                 post.authorName ||
@@ -1406,7 +1490,12 @@ export default function ProfilePage() {
                             </Text>
 
                             <View style={styles.postRowMetaRow}>
-                              <Text style={styles.postRowDate}>
+                              <Text
+                                style={[
+                                  styles.postRowDate,
+                                  isDark && { color: "#FFFFFF" },
+                                ]}
+                              >
                                 {parsePostDate(post.createdAt)
                                   ? parsePostDate(
                                       post.createdAt,
@@ -1421,9 +1510,17 @@ export default function ProfilePage() {
                           </View>
                         </View>
                         {(post.tags && post.tags.length > 0) || post.tag ? (
-                          <View style={styles.postRowTagBadge}>
+                          <View
+                            style={[
+                              styles.postRowTagBadge,
+                              isDark && styles.postRowTagBadgeDark,
+                            ]}
+                          >
                             <Text
-                              style={styles.postRowTagText}
+                              style={[
+                                styles.postRowTagText,
+                                isDark && styles.postRowTagTextDark,
+                              ]}
                               numberOfLines={1}
                             >
                               #{post.tags?.[0] || post.tag}
@@ -1435,6 +1532,7 @@ export default function ProfilePage() {
                             style={[
                               styles.postRowContent,
                               styles.postRowContentWithImage,
+                              isDark && { color: "#FFFFFF" },
                             ]}
                             numberOfLines={1}
                           >
@@ -1457,7 +1555,9 @@ export default function ProfilePage() {
             ) : null}
           </>
         ) : (
-          <View style={styles.listCard}>
+          <View
+            style={[styles.listCard, isDark && styles.favoriteListCardDark]}
+          >
             {favoritePosts.length === 0 ? (
               <Text style={styles.emptyText}>目前沒有收藏貼文</Text>
             ) : (
@@ -1491,14 +1591,25 @@ export default function ProfilePage() {
                       />
 
                       <View style={styles.postRowAuthorInfo}>
-                        <Text style={styles.postRowName} numberOfLines={1}>
+                        <Text
+                          style={[
+                            styles.postRowName,
+                            isDark && { color: "#FFFFFF" },
+                          ]}
+                          numberOfLines={1}
+                        >
                           {profileMap[post.authorId || post.deviceId]?.name ||
                             post.authorName ||
                             post.userId ||
                             userId}
                         </Text>
 
-                        <Text style={styles.postRowDate}>
+                        <Text
+                          style={[
+                            styles.postRowDate,
+                            isDark && { color: "#FFFFFF" },
+                          ]}
+                        >
                           {parsePostDate(post.createdAt)
                             ? parsePostDate(post.createdAt).toLocaleDateString(
                                 "zh-TW",
@@ -1515,8 +1626,19 @@ export default function ProfilePage() {
 
                     {/* 標籤移到頭貼區塊下方 */}
                     {(post.tags && post.tags.length > 0) || post.tag ? (
-                      <View style={styles.postRowTagBadge}>
-                        <Text style={styles.postRowTagText} numberOfLines={1}>
+                      <View
+                        style={[
+                          styles.postRowTagBadge,
+                          isDark && styles.postRowTagBadgeDark,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.postRowTagText,
+                            isDark && styles.postRowTagTextDark,
+                          ]}
+                          numberOfLines={1}
+                        >
                           #{post.tags?.[0] || post.tag}
                         </Text>
                       </View>
@@ -1528,6 +1650,7 @@ export default function ProfilePage() {
                         style={[
                           styles.postRowContent,
                           styles.postRowContentWithImage,
+                          isDark && { color: "#FFFFFF" },
                         ]}
                         numberOfLines={1}
                       >
@@ -1551,7 +1674,9 @@ export default function ProfilePage() {
 
         {/* 月曆 */}
         {activeSection === "posts" && postViewMode === "calendar" ? (
-          <View style={styles.calendarCard}>
+          <View
+            style={[styles.calendarCard, isDark && styles.calendarCardDark]}
+          >
             <View style={styles.calendarHeader}>
               <TouchableOpacity
                 onPress={() => {
@@ -1675,8 +1800,18 @@ export default function ProfilePage() {
             ))}
 
             {selectedCalendarDay ? (
-              <View style={styles.selectedDayPosts}>
-                <Text style={styles.selectedDayPostsTitle}>
+              <View
+                style={[
+                  styles.selectedDayPosts,
+                  isDark && styles.selectedDayPostsDark,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.selectedDayPostsTitle,
+                    isDark && { color: "#FFFFFF" },
+                  ]}
+                >
                   {new Date(
                     `${selectedCalendarDay}T00:00:00`,
                   ).toLocaleDateString("zh-TW", {
@@ -1693,7 +1828,10 @@ export default function ProfilePage() {
                   selectedCalendarDayPosts.map((post) => (
                     <TouchableOpacity
                       key={post.id}
-                      style={styles.calendarPostRow}
+                      style={[
+                        styles.calendarPostRow,
+                        isDark && styles.calendarPostRowDark,
+                      ]}
                       onPress={() => {
                         openPostDetail(post);
                       }}
@@ -1714,13 +1852,21 @@ export default function ProfilePage() {
                       <View style={styles.calendarPostContent}>
                         <View style={styles.calendarPostHeader}>
                           <Text
-                            style={styles.calendarPostUserName}
+                            style={[
+                              styles.calendarPostUserName,
+                              isDark && { color: "#FFFFFF" },
+                            ]}
                             numberOfLines={1}
                           >
                             {post.authorName || post.userId || userId}
                           </Text>
 
-                          <Text style={styles.calendarPostDate}>
+                          <Text
+                            style={[
+                              styles.calendarPostDate,
+                              isDark && { color: "#FFFFFF" },
+                            ]}
+                          >
                             {parsePostDate(post.createdAt)?.toLocaleTimeString(
                               "zh-TW",
                               {
@@ -1733,7 +1879,10 @@ export default function ProfilePage() {
 
                         {(post.tags && post.tags.length > 0) || post.tag ? (
                           <Text
-                            style={styles.calendarPostTag}
+                            style={[
+                              styles.calendarPostTag,
+                              isDark && { color: "#ebebeb" },
+                            ]}
                             numberOfLines={1}
                           >
                             #{post.tags?.[0] || post.tag}
@@ -1744,6 +1893,7 @@ export default function ProfilePage() {
                           style={[
                             styles.calendarPostText,
                             styles.calendarPostTextWithImage,
+                            isDark && { color: "#FFFFFF" },
                           ]}
                           numberOfLines={1}
                         >
@@ -1775,6 +1925,7 @@ export default function ProfilePage() {
       <PostDetailModal
         visible={detailVisible}
         post={selectedPostDetail}
+        isDark={isDark}
         onClose={() => {
           setDetailVisible(false);
           setSelectedPostDetail(null);
@@ -1816,11 +1967,17 @@ export default function ProfilePage() {
               </View>
             ) : null}
 
-            <View style={styles.commentInputBar}>
+            <View
+              style={[
+                styles.commentInputBar,
+                isDark && styles.commentInputBarDark,
+              ]}
+            >
               <View style={styles.commentInputActions}>
                 <TouchableOpacity
                   style={[
                     styles.commentActionBtn,
+                    isDark && styles.commentActionBtnDark,
                     isSendingComment && styles.commentActionBtnDisabled,
                   ]}
                   onPress={takeCommentPhoto}
@@ -1836,6 +1993,7 @@ export default function ProfilePage() {
                 <TouchableOpacity
                   style={[
                     styles.commentActionBtn,
+                    isDark && styles.commentActionBtnDark,
                     isSendingComment && styles.commentActionBtnDisabled,
                   ]}
                   onPress={pickCommentPhoto}
@@ -1852,12 +2010,13 @@ export default function ProfilePage() {
               <TextInput
                 style={[
                   styles.commentInputInPage,
+                  isDark && styles.commentInputInPageDark,
                   isSendingComment && styles.commentInputDisabled,
                 ]}
                 placeholder={
                   isSendingComment ? "留言發送中..." : "輸入你的留言..."
                 }
-                placeholderTextColor="#aaaaaa"
+                placeholderTextColor={isDark ? "#7A746E" : "#aaaaaa"}
                 value={commentText}
                 onChangeText={setCommentText}
                 editable={!isSendingComment}
@@ -1888,7 +2047,7 @@ export default function ProfilePage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F3EC",
+    backgroundColor: "#6b4d1b",
   },
 
   containerContent: {
@@ -1903,6 +2062,7 @@ const styles = StyleSheet.create({
 
   topSection: {
     height: 200,
+    position: "relative",
   },
 
   contentCard: {
@@ -1914,7 +2074,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     elevation: 10,
-    shadowColor: "#000000",
+    shadowColor: "#202624",
     shadowOffset: {
       width: 0,
       height: 0,
@@ -1930,9 +2090,25 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderRadius: 60,
     elevation: 5,
-    shadowColor: "#000000",
+    shadowColor: "#202624",
     shadowOpacity: 0.1,
     shadowRadius: 10,
+  },
+
+  themeToggleButton: {
+    position: "absolute",
+    top: 70,
+    left: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 4,
+    shadowColor: "#202624",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
 
   avatarImage: {
@@ -1985,7 +2161,9 @@ const styles = StyleSheet.create({
   },
 
   editButton: {
-    width: 40,
+    borderRadius: 30,
+    width: 30,
+    height: 30,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2042,7 +2220,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#E7E2D9",
+    borderBottomColor: "#B5B5B6",
   },
 
   sectionTab: {
@@ -2088,8 +2266,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
 
+  viewTabDark: {
+    backgroundColor: "#9FA7A2",
+  },
+
   viewTabActive: {
     backgroundColor: "#B1D497",
+  },
+
+  viewTabActiveDark: {
+    backgroundColor: "#475F4B",
   },
 
   viewTabText: {
@@ -2116,6 +2302,14 @@ const styles = StyleSheet.create({
       width: 0,
       height: 2,
     },
+  },
+
+  listCardDark: {
+    backgroundColor: "#4a5750",
+  },
+
+  favoriteListCardDark: {
+    backgroundColor: "#4a5750",
   },
 
   postRow: {
@@ -2169,10 +2363,18 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
 
+  postRowTagBadgeDark: {
+    backgroundColor: "#475F4B",
+  },
+
   postRowTagText: {
     fontSize: 12,
     fontWeight: "600",
     color: "#777",
+  },
+
+  postRowTagTextDark: {
+    color: "#FFFFFF",
   },
 
   postRowContentRow: {
@@ -2218,6 +2420,10 @@ const styles = StyleSheet.create({
       width: 0,
       height: 2,
     },
+  },
+
+  calendarCardDark: {
+    backgroundColor: "#9FA7A2",
   },
 
   calendarHeader: {
@@ -2317,6 +2523,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
 
+  selectedDayPostsDark: {
+    backgroundColor: "#39443e",
+  },
+
   selectedDayPostsTitle: {
     marginBottom: 10,
     fontSize: 14,
@@ -2330,6 +2540,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#eeeeee",
+  },
+
+  calendarPostRowDark: {
+    backgroundColor: "#39443e",
   },
 
   calendarPostLeft: {
@@ -2399,6 +2613,11 @@ const styles = StyleSheet.create({
     borderTopColor: "#eeeeee",
   },
 
+  commentInputBarDark: {
+    backgroundColor: "#313B37",
+    borderTopColor: "#313B37",
+  },
+
   commentInputActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -2413,6 +2632,10 @@ const styles = StyleSheet.create({
     marginRight: 8,
     backgroundColor: "#F0F4EC",
     borderRadius: 21,
+  },
+
+  commentActionBtnDark: {
+    backgroundColor: "#39443E",
   },
 
   commentActionBtnDisabled: {
@@ -2448,6 +2671,11 @@ const styles = StyleSheet.create({
     color: "#333333",
   },
 
+  commentInputInPageDark: {
+    backgroundColor: "#9FA7A2",
+    color: "#7A746E",
+  },
+
   commentInputDisabled: {
     backgroundColor: "#eeeeee",
     color: "#999999",
@@ -2465,5 +2693,9 @@ const styles = StyleSheet.create({
 
   sendCommentBtnDisabled: {
     backgroundColor: "#F0F4EC",
+  },
+
+  textWhiteDark: {
+    color: "#FFFFFF",
   },
 });
