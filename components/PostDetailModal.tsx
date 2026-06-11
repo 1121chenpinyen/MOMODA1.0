@@ -37,6 +37,7 @@ interface PostDetailModalProps {
   visible: boolean;
   post: any;
   onClose: () => void;
+  waterDropToastVisible?: boolean;
 
   // 從通知頁進入時，用來定位特定留言
   targetCommentId?: string | null;
@@ -190,6 +191,7 @@ export default function PostDetailModal({
   visible,
   post,
   onClose,
+  waterDropToastVisible = false,
   targetCommentId = null,
   currentUserId = "",
   onLikePost,
@@ -487,12 +489,25 @@ export default function PostDetailModal({
 
             <View style={styles.headerActionButton} />
           </View>
+          {waterDropToastVisible ? (
+            <View style={styles.waterDropToast}>
+              <Ionicons
+                name="water"
+                size={20}
+                color="#6FA8DC"
+              />
+
+              <Text style={styles.waterDropToastText}>
+                獲得 3 個水滴
+              </Text>
+            </View>
+          ) : null}
 
           {post ? (
             <ScrollView
               ref={scrollViewRef}
               style={styles.postDetailContent}
-              keyboardShouldPersistTaps="handled"
+              keyboardShouldPersistTaps="always"
               showsVerticalScrollIndicator={false}
               refreshControl={
                 <RefreshControl
@@ -1176,5 +1191,34 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderTopWidth: 0.5,
     borderTopColor: "#eeeeee",
+  },
+  waterDropToast: {
+    position: "absolute",
+    top: 150,
+    left: 50,
+    right: 50,
+    zIndex: 999,
+    elevation: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#B1D497",
+    borderRadius: 999,
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+  },
+
+  waterDropToastText: {
+    marginLeft: 7,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#ffffff",
   },
 });

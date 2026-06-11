@@ -102,7 +102,7 @@ export default function ProfilePage() {
   const [isSendingComment, setIsSendingComment] = useState(false);
 
   const isSendingCommentRef = useRef(false);
-
+  
   // 數據統計狀態
   const [stats, setStats] = useState({
     sentPosts: 0,
@@ -652,7 +652,7 @@ export default function ProfilePage() {
 
       return;
     }
-
+    Keyboard.dismiss();
     isSendingCommentRef.current = true;
     setIsSendingComment(true);
 
@@ -711,7 +711,7 @@ export default function ProfilePage() {
         console.error("更新花園成長失敗:", gardenError);
       }
 
-      Keyboard.dismiss();
+      
 
       const updatedPost = {
         ...selectedPostDetail,
@@ -2411,7 +2411,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 8,
-    backgroundColor: "#f4f2fb",
+    backgroundColor: "#F0F4EC",
     borderRadius: 21,
   },
 
@@ -2442,7 +2442,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: "#f4f2fb",
+    backgroundColor: "#F0F4EC",
     borderRadius: 22,
     fontSize: 14,
     color: "#333333",
@@ -2459,11 +2459,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 10,
-    backgroundColor: "#a29add",
+    backgroundColor: "#B1D497",
     borderRadius: 21,
   },
 
   sendCommentBtnDisabled: {
-    backgroundColor: "#c9c5dd",
+    backgroundColor: "#F0F4EC",
   },
 });

@@ -121,7 +121,7 @@ export default function EncyclopediaScreen() {
 
                   <Text style={styles.plantName}>{plant.name}</Text>
                   <Text style={styles.plantState}>
-                    {unlocked ? "已解鎖，顯示花的照片" : "尚未解鎖"}
+                    {unlocked ? "已解鎖" : "尚未解鎖"}
                   </Text>
                 </View>
               );

@@ -157,7 +157,31 @@ export default function NotificationPage() {
   const [isSendingComment, setIsSendingComment] = useState(false);
 
   const isSendingCommentRef = useRef(false);
+  const [waterDropToastVisible, setWaterDropToastVisible] =
+    useState(false);
 
+  const waterDropToastTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showWaterDropToast = () => {
+    setWaterDropToastVisible(true);
+
+    if (waterDropToastTimerRef.current) {
+      clearTimeout(waterDropToastTimerRef.current);
+    }
+
+    waterDropToastTimerRef.current = setTimeout(() => {
+      setWaterDropToastVisible(false);
+    }, 1800);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (waterDropToastTimerRef.current) {
+        clearTimeout(waterDropToastTimerRef.current);
+      }
+    };
+  }, []);
   /*
     取得裝置 ID
   */
@@ -656,7 +680,12 @@ export default function NotificationPage() {
 
           const globalData = await getGlobalData();
           const newWaterDrops = (globalData.waterDrops || 0) + 3;
-          await updateGlobalData({ waterDrops: newWaterDrops });
+
+          await updateGlobalData({
+            waterDrops: newWaterDrops,
+          });
+
+          showWaterDropToast();
         }
       } catch (gardenError) {
         console.error("更新花園成長失敗:", gardenError);
@@ -753,62 +782,82 @@ export default function NotificationPage() {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {notifications.map((item) => {
-              const isRead = readNotificationIds.includes(item.id);
+            <View style={styles.notificationsCard}>
+              {notifications.map((item, index) => {
+                const isRead = readNotificationIds.includes(item.id);
 
-              return (
-                <Pressable
-                  key={item.id}
-                  style={[
-                    styles.notificationCard,
+                const isLastItem =
+                  index === notifications.length - 1;
 
-                    isRead
-                      ? styles.readNotificationCard
-                      : styles.unreadNotificationCard,
-                  ]}
-                  onPress={() => {
-                    openPostDetail(item.id, item.post);
-                  }}
-                >
-                  <View style={styles.leftColumn}>
-                    {renderAvatar(item.comment.userAvatar, 48)}
-                  </View>
+                return (
+                  <Pressable
+                    key={item.id}
+                    style={[
+                      styles.notificationRow,
 
-                  <View style={styles.bodyColumn}>
-                    <View style={styles.nameRow}>
-                      <Text style={styles.userName} numberOfLines={1}>
-                        {item.comment.userName || "匿名小夥伴"}
-                      </Text>
+                      isRead
+                        ? styles.readNotificationRow
+                        : styles.unreadNotificationRow,
 
-                      <Text style={styles.commentLabel}> 留言：</Text>
+                      !isLastItem &&
+                        styles.notificationRowDivider,
+                    ]}
+                    onPress={() => {
+                      openPostDetail(item.id, item.post);
+                    }}
+                  >
+                    <View style={styles.leftColumn}>
+                      {renderAvatar(
+                        item.comment.userAvatar,
+                        48,
+                      )}
                     </View>
 
-                    <View style={styles.commentRow}>
-                      <Text
-                        style={styles.commentText}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {item.comment.text || "(圖片)"}
-                      </Text>
+                    <View style={styles.bodyColumn}>
+                      <View style={styles.nameRow}>
+                        <Text
+                          style={styles.userName}
+                          numberOfLines={1}
+                        >
+                          {item.comment.userName ||
+                            "匿名小夥伴"}
+                        </Text>
 
-                      <Text style={styles.timeText}>
-                        {formatTime(item.comment.createdAt)}
-                      </Text>
+                        <Text style={styles.commentLabel}>
+                          {" "}
+                          在你的貼文留言：
+                        </Text>
+                      </View>
+
+                      <View style={styles.commentRow}>
+                        <Text
+                          style={styles.commentText}
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
+                        >
+                          {item.comment.text || "(圖片)"}
+                        </Text>
+
+                        <Text style={styles.timeText}>
+                          {formatTime(
+                            item.comment.createdAt,
+                          )}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
 
-                  {item.comment.imageUrl ? (
-                    <Image
-                      source={{
-                        uri: item.comment.imageUrl,
-                      }}
-                      style={styles.commentImage}
-                    />
-                  ) : null}
-                </Pressable>
-              );
-            })}
+                    {item.comment.imageUrl ? (
+                      <Image
+                        source={{
+                          uri: item.comment.imageUrl,
+                        }}
+                        style={styles.commentImage}
+                      />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </View>
           </ScrollView>
         )}
 
@@ -826,6 +875,7 @@ export default function NotificationPage() {
           onCommentSortChange={setCommentSortMode}
           onLikeComment={handleLikeComment}
           showCommentInput={true}
+          waterDropToastVisible={waterDropToastVisible}
           renderCommentInput={() => (
             <>
               {commentImage ? (
@@ -930,13 +980,13 @@ export default function NotificationPage() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f7f5ff",
+    backgroundColor: "#F7F3EC",
   },
 
   container: {
     flex: 1,
     paddingHorizontal: 16,
-    backgroundColor: "#f7f5ff",
+    backgroundColor: "#f7f3ec",
   },
 
   header: {
@@ -951,7 +1001,7 @@ const styles = StyleSheet.create({
     width: "100%",
     fontSize: 28,
     fontWeight: "700",
-    color: "#3b3256",
+    color: "#3E3A36",
     textAlign: "center",
   },
 
@@ -963,7 +1013,7 @@ const styles = StyleSheet.create({
 
   loadingText: {
     marginTop: 12,
-    color: "#7f7d96",
+    color: "#7A746E",
   },
 
   emptyBox: {
@@ -977,13 +1027,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontSize: 18,
     fontWeight: "700",
-    color: "#6a5c9d",
+    color: "#B1D497",
     textAlign: "center",
   },
 
   emptyText: {
     fontSize: 14,
-    color: "#8f8a9d",
+    color: "#7A746E",
     textAlign: "center",
     lineHeight: 20,
   },
@@ -996,12 +1046,10 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
 
-  notificationCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    marginBottom: 12,
-    borderRadius: 18,
+  notificationsCard: {
+    overflow: "hidden",
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
     shadowColor: "#000000",
     shadowOffset: {
       width: 0,
@@ -1012,11 +1060,23 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
-  unreadNotificationCard: {
-    backgroundColor: "#F0F4EC",
+  notificationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 16,
   },
 
-  readNotificationCard: {
+  notificationRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#eeeeee",
+  },
+
+  unreadNotificationRow: {
+    backgroundColor: "#eaf3e1",
+  },
+
+  readNotificationRow: {
     backgroundColor: "#ffffff",
   },
 
@@ -1038,14 +1098,14 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 15,
     fontWeight: "700",
-    color: "#2e2640",
+    color: "#3E3A36",
   },
 
   commentLabel: {
     flexShrink: 0,
     fontSize: 15,
     fontWeight: "400",
-    color: "#4f4a66",
+    color: "#333",
   },
 
   commentRow: {
@@ -1057,14 +1117,14 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
     fontSize: 14,
-    color: "#4f4a66",
+    color: "#333",
     lineHeight: 20,
   },
 
   timeText: {
     flexShrink: 0,
     fontSize: 12,
-    color: "#9e98b2",
+    color: "#777",
   },
 
   commentImage: {
@@ -1153,6 +1213,6 @@ const styles = StyleSheet.create({
   },
 
   sendCommentBtnDisabled: {
-    backgroundColor: "#c9c5dd",
+    backgroundColor: "#F0F4EC",
   },
 });

@@ -509,7 +509,7 @@ export default function GardenScreen() {
           if (totalClaimed > 0) {
             Alert.alert(
               "獎勵",
-              `你獲得了 ${totalClaimed} 次施肥！已加入施肥庫存。`,
+              `你獲得了 ${totalClaimed} 個肥料！已加入肥料庫存。`,
             );
           }
         } catch (e) {
@@ -1049,7 +1049,7 @@ export default function GardenScreen() {
 
   const useFertilizer = async () => {
     if (fertilizers <= 0 || !selectedPlant || !garden) {
-      Alert.alert("提醒", "施肥不足，無法施肥");
+      Alert.alert("提醒", "肥料不足，無法施肥");
       return;
     }
 
@@ -1093,8 +1093,8 @@ export default function GardenScreen() {
       Alert.alert(
         "成功",
         nextImageIndex <= -6
-          ? `已施肥！植物已成長到最終型態\n剩餘施肥: ${newFertilizers}`
-          : `已施肥！植物已往下一階段成長\n剩餘施肥: ${newFertilizers}`,
+          ? `已施肥！植物已成長到最終型態\n剩餘肥料: ${newFertilizers}`
+          : `已施肥！植物已往下一階段成長\n剩餘肥料: ${newFertilizers}`,
       );
     } catch (e) {
       console.error("施肥失敗", e);

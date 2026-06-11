@@ -144,6 +144,31 @@ export default function HomeScreen() {
   const [commentSortMode, setCommentSortMode] = useState<"new" | "likes">(
     "new",
   );
+  const [waterDropToastVisible, setWaterDropToastVisible] =
+    useState(false);
+
+  const waterDropToastTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showWaterDropToast = () => {
+    setWaterDropToastVisible(true);
+
+    if (waterDropToastTimerRef.current) {
+      clearTimeout(waterDropToastTimerRef.current);
+    }
+
+    waterDropToastTimerRef.current = setTimeout(() => {
+      setWaterDropToastVisible(false);
+    }, 1800);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (waterDropToastTimerRef.current) {
+        clearTimeout(waterDropToastTimerRef.current);
+      }
+    };
+  }, []);
   const handleLikeComment = async (commentId: string) => {
     if (!selectedPost || !currentUser.userId) return;
 
@@ -756,6 +781,7 @@ export default function HomeScreen() {
           const globalData = await getGlobalData();
           const newWaterDrops = (globalData.waterDrops || 0) + 3;
           await updateGlobalData({ waterDrops: newWaterDrops });
+          showWaterDropToast();
         }
       } catch (gardenError) {
         console.error("更新花園成長失敗:", gardenError);
@@ -1123,6 +1149,7 @@ export default function HomeScreen() {
           setCommentVisible(false);
           setSelectedPost(null);
         }}
+        waterDropToastVisible={waterDropToastVisible}
         currentUserId={currentUser.userId}
         profileMap={profileMap}
         sortedComments={sortedComments}
