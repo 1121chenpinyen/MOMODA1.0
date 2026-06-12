@@ -19,7 +19,7 @@ type ThemeContextValue = {
   toggleTheme: () => void;
 };
 
-const THEME_STORAGE_KEY = "MOMODA_THEME_MODE";
+const THEME_STORAGE_KEY = "YAHU_THEME_MODE";
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
