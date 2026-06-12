@@ -785,7 +785,7 @@ export default function NotificationPage() {
             </Text>
 
             <Text style={[styles.emptyText, isDark && styles.textWhiteDark]}>
-              當你發出的貼文有新的留言時，這裡會顯示出來。
+              再等等吧!
             </Text>
           </View>
         ) : (
