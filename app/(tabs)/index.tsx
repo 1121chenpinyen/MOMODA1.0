@@ -2,35 +2,35 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import {
-  addDoc,
-  arrayUnion,
-  collection,
-  deleteDoc,
-  doc,
-  increment,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
+    addDoc,
+    arrayUnion,
+    collection,
+    deleteDoc,
+    doc,
+    increment,
+    onSnapshot,
+    orderBy,
+    query,
+    serverTimestamp,
+    updateDoc,
+    where,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Keyboard,
-  Modal,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Keyboard,
+    Modal,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 import PostDetailModal from "../../components/PostDetailModal";
@@ -39,12 +39,13 @@ import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
 import { getRandomVariantForTag } from "../../utils/plantCatalog";
 import {
-  claimPendingPlantGrowth,
-  claimPendingRewardsOnce,
-  createPlantForPost,
-  getGarden,
-  getGlobalData,
-  updateGlobalData,
+    claimPendingPlantGrowth,
+    claimPendingRewardsOnce,
+    createPlantForPost,
+    getGarden,
+    getGlobalData,
+    removePlantsForPost,
+    updateGlobalData,
 } from "../../utils/storage";
 
 const TAGS = ["人際", "學業/工作", "飲食", "運動", "寵物", "娛樂", "其他"];
@@ -827,6 +828,7 @@ export default function HomeScreen() {
         onPress: async () => {
           try {
             await deleteDoc(doc(db, "posts", post.id));
+            await removePlantsForPost(post.id);
 
             if (selectedPost?.id === post.id) {
               setCommentVisible(false);
