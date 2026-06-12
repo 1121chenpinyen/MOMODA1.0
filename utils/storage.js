@@ -532,6 +532,45 @@ export const removePlant = async (plantId) => {
   await updateGarden(garden);
 };
 
+// 依貼文 ID 移除對應植物（刪貼文時使用）
+export const removePlantsForPost = async (postId) => {
+  if (!postId) return 0;
+
+  const garden = await getGarden();
+  const relatedPlants = (garden.plants || []).filter(
+    (plant) => plant.postId === postId,
+  );
+
+  if (relatedPlants.length === 0) {
+    return 0;
+  }
+
+  const removedPlantIds = new Set(relatedPlants.map((plant) => plant.id));
+
+  const updatedGarden = {
+    ...garden,
+    plants: (garden.plants || []).filter(
+      (plant) => !removedPlantIds.has(plant.id),
+    ),
+    positions: { ...(garden.positions || {}) },
+  };
+
+  for (const plantId of removedPlantIds) {
+    delete updatedGarden.positions[plantId];
+  }
+
+  if (
+    updatedGarden.lastSpawnedPlantId &&
+    removedPlantIds.has(updatedGarden.lastSpawnedPlantId)
+  ) {
+    updatedGarden.lastSpawnedPlantId = null;
+    updatedGarden.lastSpawnedPosition = null;
+  }
+
+  await updateGarden(updatedGarden);
+  return relatedPlants.length;
+};
+
 // 清除花園中所有植物（保留 seeds）
 export const clearAllPlants = async () => {
   const garden = await getGarden();

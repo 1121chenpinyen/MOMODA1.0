@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Asset } from "expo-asset";
 import { useFocusEffect, useRouter } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import {
@@ -9,7 +10,6 @@ import {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
@@ -33,6 +33,7 @@ import {
   DEFAULT_PLANT_IMAGE_XOFFSETS,
 } from "../../constants/plantImageSizes";
 import { getDeviceId } from "../../utils/getDeviceId";
+import { ASSET_MAP, SEED_ASSET } from "../../utils/plantCatalog";
 import {
   claimPendingRewardsOnce,
   getGarden,
@@ -47,6 +48,11 @@ import {
 } from "../../utils/storage";
 
 const backgroundImage = require("../../assets/background/background.png");
+const gardenLoadingAssets = [
+  backgroundImage,
+  SEED_ASSET,
+  ...Object.values(ASSET_MAP).flat(),
+];
 const backgroundAsset = Image.resolveAssetSource(backgroundImage);
 const BACKGROUND_ASPECT_RATIO =
   backgroundAsset.width && backgroundAsset.height
@@ -59,6 +65,7 @@ const LOCK_Y_OFFSET_ON_CONFIRM = 0;
 const WORLD_WIDTH = width * 3;
 const BACKGROUND_HEIGHT = WORLD_WIDTH / BACKGROUND_ASPECT_RATIO;
 const MAX_CAMERA_SCALE = 2.2;
+const MIN_INITIAL_LOADING_MS = 7000;
 // 當聚焦時，畫面中心的垂直偏移量（正值會把植物往上移動至視窗中心上方）
 const FOCUS_SCREEN_OFFSET_Y = 80;
 
@@ -205,9 +212,13 @@ export default function GardenScreen() {
   const mountedRef = useRef(true);
   const hasInitializedCameraRef = useRef(false);
   const hasUnlockedPlantsRef = useRef(false);
+  const hasPreloadedGardenAssetsRef = useRef(false);
+  const firstLoadStartedAtRef = useRef<number | null>(null);
   const rewardToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const loadingSpin = useRef(new Animated.Value(0)).current;
+  const loadingPulse = useRef(new Animated.Value(0)).current;
 
   const showRewardToast = useCallback((text: string, icon: string = "leaf") => {
     setRewardToastText(text);
@@ -248,6 +259,56 @@ export default function GardenScreen() {
       }
     };
   }, []);
+
+  const preloadGardenAssets = useCallback(async () => {
+    if (hasPreloadedGardenAssetsRef.current) return;
+
+    try {
+      await Promise.all(
+        gardenLoadingAssets.map((asset) =>
+          Asset.fromModule(asset).downloadAsync(),
+        ),
+      );
+      hasPreloadedGardenAssetsRef.current = true;
+    } catch (error) {
+      console.error("預載花園素材失敗:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const spinAnimation = Animated.loop(
+      Animated.timing(loadingSpin, {
+        toValue: 1,
+        duration: 1400,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(loadingPulse, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(loadingPulse, {
+          toValue: 0,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    spinAnimation.start();
+    pulseAnimation.start();
+
+    return () => {
+      spinAnimation.stop();
+      pulseAnimation.stop();
+    };
+  }, [loadingPulse, loadingSpin]);
 
   const sceneContentHeight = Math.max(
     BACKGROUND_HEIGHT,
@@ -519,7 +580,13 @@ export default function GardenScreen() {
   const loadGarden = useCallback(async () => {
     if (!mountedRef.current) return;
 
+    const isFirstLoad = !hasInitializedCameraRef.current;
+    if (isFirstLoad && firstLoadStartedAtRef.current == null) {
+      firstLoadStartedAtRef.current = Date.now();
+    }
+
     try {
+      await preloadGardenAssets();
       await initGarden();
       const gardenData = await getGarden();
       const globalData = await getGlobalData();
@@ -680,9 +747,23 @@ export default function GardenScreen() {
     } catch (error) {
       console.error("加載花園失敗:", error);
     } finally {
+      if (isFirstLoad && firstLoadStartedAtRef.current != null) {
+        const elapsed = Date.now() - firstLoadStartedAtRef.current;
+        const remaining = Math.max(0, MIN_INITIAL_LOADING_MS - elapsed);
+        if (remaining > 0) {
+          await new Promise((resolve) => setTimeout(resolve, remaining));
+        }
+        firstLoadStartedAtRef.current = null;
+      }
       setLoading(false);
     }
-  }, [applyCamera, plantFocusVisible, sceneContentHeight, showRewardToast]);
+  }, [
+    applyCamera,
+    plantFocusVisible,
+    preloadGardenAssets,
+    sceneContentHeight,
+    showRewardToast,
+  ]);
 
   useEffect(() => {
     loadGarden();
@@ -1774,8 +1855,60 @@ export default function GardenScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+      <View style={[styles.loadingScreen, isDark && styles.loadingScreenDark]}>
+        <View style={styles.loadingGlow} />
+        <View style={[styles.loadingCard, isDark && styles.loadingCardDark]}>
+          <View style={styles.loadingOrb}>
+            <Animated.View
+              style={[
+                styles.loadingRing,
+                {
+                  transform: [
+                    {
+                      rotate: loadingSpin.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ["0deg", "360deg"],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+            <Animated.View
+              style={[
+                styles.loadingLeafWrap,
+                {
+                  transform: [
+                    {
+                      scale: loadingPulse.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.92, 1.08],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="leaf"
+                size={40}
+                color={isDark ? "#B7E4C7" : "#4CAF50"}
+              />
+            </Animated.View>
+          </View>
+
+          <Text style={[styles.loadingTitle, isDark && styles.textWhiteDark]}>
+            花園載入中
+          </Text>
+          <Text
+            style={[
+              styles.loadingSubtitle,
+              isDark && styles.loadingSubtitleDark,
+            ]}
+          >
+            正在整理植物位置與成長資料
+          </Text>
+        </View>
       </View>
     );
   }
@@ -1904,12 +2037,12 @@ export default function GardenScreen() {
           </View>
 
           {sortedPlants.length === 0 && (
-            <View style={[styles.emptyContainer, { width: WORLD_WIDTH }]}>
-              <Text style={styles.emptyEmoji}>🌱</Text>
-              <Text style={styles.emptyText}>你的花園還是空的</Text>
-              <Text style={styles.emptySubText}>
-                發文後，對應的花朵會自動在花園長出來。
-              </Text>
+            <View
+              style={[styles.emptyContainer, { left: width, width }]}
+              pointerEvents="none"
+            >
+              <Text style={styles.emptyText}>這裡沒有植物ㄚㄚ</Text>
+              <Text style={styles.emptySubText}>快去首頁發出第一篇貼文吧!</Text>
             </View>
           )}
 
@@ -2047,7 +2180,7 @@ export default function GardenScreen() {
       </View>
 
       {rewardToastVisible ? (
-        <View style={styles.rewardToast}>
+        <View style={[styles.rewardToast, isDark && styles.rewardToastDark]}>
           {rewardToastIcon === "eat1-image" ? (
             <Image
               source={require("../../assets/plant/eat1/eat1-1.png")}
@@ -2057,10 +2190,14 @@ export default function GardenScreen() {
             <MaterialCommunityIcons
               name={rewardToastIcon as any}
               size={20}
-              color="#6FA8DC"
+              color={isDark ? "#FFFFFF" : "#6FA8DC"}
             />
           )}
-          <Text style={styles.rewardToastText}>{rewardToastText}</Text>
+          <Text
+            style={[styles.rewardToastText, isDark && styles.rewardToastTextDark]}
+          >
+            {rewardToastText}
+          </Text>
         </View>
       ) : null}
 
@@ -2532,6 +2669,80 @@ const styles = StyleSheet.create({
     left: 0,
     height: "100%",
   },
+  loadingScreen: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#EAF4EA",
+    overflow: "hidden",
+  },
+  loadingScreenDark: {
+    backgroundColor: "#1C231F",
+  },
+  loadingGlow: {
+    position: "absolute",
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: "rgba(111, 168, 220, 0.18)",
+    top: "25%",
+  },
+  loadingCard: {
+    width: "78%",
+    maxWidth: 340,
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    borderRadius: 28,
+    backgroundColor: "rgba(255, 255, 255, 0.82)",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 12,
+  },
+  loadingCardDark: {
+    backgroundColor: "rgba(33, 43, 37, 0.92)",
+  },
+  loadingOrb: {
+    width: 120,
+    height: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 18,
+  },
+  loadingRing: {
+    position: "absolute",
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 5,
+    borderColor: "rgba(76, 175, 80, 0.12)",
+    borderTopColor: "#4CAF50",
+    borderRightColor: "#7FBF7F",
+  },
+  loadingLeafWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.75)",
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#24442A",
+    letterSpacing: 0.6,
+  },
+  loadingSubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#5D6F62",
+  },
+  loadingSubtitleDark: {
+    color: "#C8D6CC",
+  },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
@@ -2604,12 +2815,16 @@ const styles = StyleSheet.create({
     color: "#1B5E20",
   },
   emptyContainer: {
-    flex: 1,
+    position: "absolute",
+    top: 0,
+    bottom: 0,
     justifyContent: "center",
     alignItems: "center",
+    transform: [{ translateY: -60 }],
   },
-  emptyEmoji: {
-    fontSize: 80,
+  emptyImage: {
+    width: 72,
+    height: 72,
     marginBottom: 16,
   },
   emptyText: {
@@ -2748,6 +2963,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
     color: "#464646",
+  },
+  rewardToastDark: {
+    backgroundColor: "#475F4B",
+  },
+  rewardToastTextDark: {
+    color: "#FFFFFF",
   },
   rewardToastImage: {
     width: 24,

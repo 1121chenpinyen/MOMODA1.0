@@ -2,31 +2,31 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import {
-  arrayUnion,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  increment,
-  onSnapshot,
-  query,
-  updateDoc,
-  where,
+    arrayUnion,
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    increment,
+    onSnapshot,
+    query,
+    updateDoc,
+    where,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Keyboard,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Keyboard,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -35,9 +35,10 @@ import { useColorScheme } from "../../components/useColorScheme";
 import { db, storage } from "../../config/firebaseConfig";
 import { getDeviceId } from "../../utils/getDeviceId";
 import {
-  getGarden,
-  getGlobalData,
-  updateGlobalData,
+    getGarden,
+    getGlobalData,
+    removePlantsForPost,
+    updateGlobalData,
 } from "../../utils/storage";
 
 const READ_NOTIFICATIONS_STORAGE_KEY = "read_notification_ids";
@@ -449,6 +450,7 @@ export default function NotificationPage() {
         onPress: async () => {
           try {
             await deleteDoc(doc(db, "posts", post.id));
+            await removePlantsForPost(post.id);
 
             setDetailVisible(false);
             setSelectedPost(null);

@@ -39,6 +39,7 @@ import { getDeviceId } from "../../utils/getDeviceId";
 import {
   getGarden,
   getGlobalData,
+  removePlantsForPost,
   updateGlobalData,
 } from "../../utils/storage";
 
@@ -121,7 +122,7 @@ export default function ProfilePage() {
 
   const palette = useMemo(
     () => ({
-      background: isDark ? "#202624" : "#F7F3EC",
+      background: isDark ? "#131A21" : "#F7F3EC",
       card: isDark ? "#39443E" : "#FFFFFF",
       header: isDark ? "#131A21" : "#F7F3EC",
       textPrimary: isDark ? "#FFFFFF" : "#1E1E1E",
@@ -445,6 +446,7 @@ export default function ProfilePage() {
         onPress: async () => {
           try {
             await deleteDoc(doc(db, "posts", post.id));
+            await removePlantsForPost(post.id);
 
             setMyPosts((previousPosts) =>
               previousPosts.filter((item) => item.id !== post.id),
@@ -1722,7 +1724,10 @@ export default function ProfilePage() {
 
             <View style={styles.weekdayRow}>
               {["日", "一", "二", "三", "四", "五", "六"].map((label) => (
-                <Text key={label} style={styles.weekdayText}>
+                <Text
+                  key={label}
+                  style={[styles.weekdayText, isDark && styles.weekdayTextDark]}
+                >
                   {label}
                 </Text>
               ))}
@@ -2451,6 +2456,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#999999",
     textAlign: "center",
+  },
+  weekdayTextDark: {
+    color: "#FFFFFF",
   },
 
   weekRow: {
