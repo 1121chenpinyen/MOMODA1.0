@@ -113,7 +113,7 @@ const DEAD_ASSET_MAP: Record<string, any> = {
   pet2: require("../assets/plant/pet2/cu.png"),
 };
 
-const SEED_ASSET = require("../assets/plant/seed.png");
+export const SEED_ASSET = require("../assets/plant/seed.png");
 
 // 這些分類會自動生成植物，且從對應兩個變體隨機選 1 個
 export const TAG_TO_VARIANTS: Record<string, string[]> = {

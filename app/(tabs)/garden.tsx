@@ -33,7 +33,7 @@ import {
   DEFAULT_PLANT_IMAGE_XOFFSETS,
 } from "../../constants/plantImageSizes";
 import { getDeviceId } from "../../utils/getDeviceId";
-import { ASSET_MAP } from "../../utils/plantCatalog";
+import { ASSET_MAP, SEED_ASSET } from "../../utils/plantCatalog";
 import {
   claimPendingRewardsOnce,
   clearAllPlants,
@@ -51,6 +51,7 @@ import {
 const backgroundImage = require("../../assets/background/background.png");
 const gardenLoadingAssets = [
   backgroundImage,
+  SEED_ASSET,
   ...Object.values(ASSET_MAP).flat(),
 ];
 const backgroundAsset = Image.resolveAssetSource(backgroundImage);

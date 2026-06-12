@@ -1490,16 +1490,24 @@ function PublishDialog({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
-      <SafeAreaView style={styles.publishContainer}>
-        <View style={styles.publishHeader}>
+      <SafeAreaView
+        style={[styles.publishContainer, isDark && styles.publishContainerDark]}
+      >
+        <View style={[styles.publishHeader, isDark && styles.publishHeaderDark]}>
           <TouchableOpacity
             style={styles.publishHeaderSide}
             onPress={handleClose}
           >
-            <Text style={styles.cancelBtn}>取消</Text>
+            <Text style={[styles.cancelBtn, isDark && styles.cancelBtnDark]}>
+              取消
+            </Text>
           </TouchableOpacity>
 
-          <Text style={styles.publishHeaderTitle}>發布新貼文</Text>
+          <Text
+            style={[styles.publishHeaderTitle, isDark && styles.publishHeaderTitleDark]}
+          >
+            發布新貼文
+          </Text>
 
           <View style={styles.publishHeaderSideRight}>
             <TouchableOpacity
@@ -1507,16 +1515,24 @@ function PublishDialog({
               disabled={isLoading || !canPublish}
               style={[
                 styles.publishBtn,
+                isDark && canPublish && styles.publishBtnDark,
                 (isLoading || !canPublish) && styles.publishBtnDisabled,
+                isDark &&
+                  (isLoading || !canPublish) &&
+                  styles.publishBtnDisabledDark,
               ]}
             >
               {isLoading ? (
-                <ActivityIndicator size="small" color="#999" />
+                <ActivityIndicator
+                  size="small"
+                  color={isDark ? "#9FA7A2" : "#999"}
+                />
               ) : (
                 <Text
                   style={[
                     styles.publishBtnText,
                     !canPublish && styles.publishBtnTextDisabled,
+                    isDark && !canPublish && styles.publishBtnTextDisabledDark,
                   ]}
                 >
                   發布
@@ -1545,15 +1561,19 @@ function PublishDialog({
             )}
 
             <View>
-              <Text style={styles.userName}>{userName || "你"}</Text>
-              <Text style={styles.userStatus}>現在線上</Text>
+              <Text style={[styles.userName, isDark && styles.userNameDark]}>
+                {userName || "你"}
+              </Text>
+              <Text style={[styles.userStatus, isDark && styles.userStatusDark]}>
+                現在線上
+              </Text>
             </View>
           </View>
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, isDark && styles.inputDark]}
             placeholder="說說你的想法..."
-            placeholderTextColor="#999"
+            placeholderTextColor={isDark ? "#9FA7A2" : "#999"}
             value={postText}
             onChangeText={setPostText}
             multiline
@@ -1561,7 +1581,9 @@ function PublishDialog({
           />
 
           <View style={styles.charCounter}>
-            <Text style={styles.charCountText}>{postText.length}/500</Text>
+            <Text style={[styles.charCountText, isDark && styles.charCountTextDark]}>
+              {postText.length}/500
+            </Text>
           </View>
 
           {selectedMedia && (
@@ -1589,29 +1611,48 @@ function PublishDialog({
 
           {!selectedMedia && (
             <View style={styles.mediaOptions}>
-              <Text style={styles.mediaLabel}>添加照片或影片</Text>
+              <Text style={[styles.mediaLabel, isDark && styles.mediaLabelDark]}>
+                添加照片或影片
+              </Text>
 
               <View style={styles.mediaButtonRow}>
-                <TouchableOpacity style={styles.mediaBtn} onPress={takePhoto}>
+                <TouchableOpacity
+                  style={[styles.mediaBtn, isDark && styles.mediaBtnDark]}
+                  onPress={takePhoto}
+                >
                   <Ionicons name="camera" size={28} color="#B1D497" />
-                  <Text style={styles.mediaBtnText}>拍照</Text>
+                  <Text style={[styles.mediaBtnText, isDark && styles.mediaBtnTextDark]}>
+                    拍照
+                  </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.mediaBtn} onPress={pickPhoto}>
+                <TouchableOpacity
+                  style={[styles.mediaBtn, isDark && styles.mediaBtnDark]}
+                  onPress={pickPhoto}
+                >
                   <Ionicons name="image" size={28} color="#B1D497" />
-                  <Text style={styles.mediaBtnText}>照片</Text>
+                  <Text style={[styles.mediaBtnText, isDark && styles.mediaBtnTextDark]}>
+                    照片
+                  </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.mediaBtn} onPress={pickVideo}>
+                <TouchableOpacity
+                  style={[styles.mediaBtn, isDark && styles.mediaBtnDark]}
+                  onPress={pickVideo}
+                >
                   <Ionicons name="videocam" size={28} color="#B1D497" />
-                  <Text style={styles.mediaBtnText}>影片</Text>
+                  <Text style={[styles.mediaBtnText, isDark && styles.mediaBtnTextDark]}>
+                    影片
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
           <View style={styles.tagSection}>
-            <Text style={styles.tagLabel}>選擇標籤</Text>
+            <Text style={[styles.tagLabel, isDark && styles.tagLabelDark]}>
+              選擇標籤
+            </Text>
 
             <View style={styles.tagGrid}>
               {TAGS.map((tag) => (
@@ -1619,13 +1660,18 @@ function PublishDialog({
                   key={tag}
                   style={[
                     styles.tagBtn,
+                    isDark && styles.tagBtnDark,
                     selectedTags.includes(tag) && styles.tagBtnSelected,
+                    isDark &&
+                      selectedTags.includes(tag) &&
+                      styles.tagBtnSelectedDark,
                   ]}
                   onPress={() => toggleTag(tag)}
                 >
                   <Text
                     style={[
                       styles.tagText,
+                      isDark && styles.tagTextDark,
                       selectedTags.includes(tag) && styles.tagTextSelected,
                     ]}
                   >
@@ -2202,6 +2248,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
+  publishContainerDark: {
+    backgroundColor: "#202624",
+  },
   publishHeader: {
     position: "relative",
     flexDirection: "row",
@@ -2212,6 +2261,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderColor: "#eee",
   },
+  publishHeaderDark: {
+    borderColor: "#39443E",
+  },
 
   publishHeaderTitle: {
     position: "absolute",
@@ -2221,6 +2273,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#333",
+  },
+  publishHeaderTitleDark: {
+    color: "#FFFFFF",
   },
 
   publishHeaderSide: {
@@ -2238,6 +2293,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
   },
+  cancelBtnDark: {
+    color: "#D2D8D5",
+  },
   publishBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -2246,8 +2304,14 @@ const styles = StyleSheet.create({
     minWidth: 62,
     alignItems: "center",
   },
+  publishBtnDark: {
+    backgroundColor: "#475F4B",
+  },
   publishBtnDisabled: {
     backgroundColor: "#ddd",
+  },
+  publishBtnDisabledDark: {
+    backgroundColor: "#313B37",
   },
   publishBtnText: {
     color: "#fff",
@@ -2256,6 +2320,9 @@ const styles = StyleSheet.create({
   },
   publishBtnTextDisabled: {
     color: "#999",
+  },
+  publishBtnTextDisabledDark: {
+    color: "#9FA7A2",
   },
   publishContent: {
     flex: 1,
@@ -2290,10 +2357,16 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
   },
+  userNameDark: {
+    color: "#FFFFFF",
+  },
   userStatus: {
     fontSize: 12,
     color: "#999",
     marginTop: 2,
+  },
+  userStatusDark: {
+    color: "#B8C2BC",
   },
   input: {
     backgroundColor: "#F7F3EC",
@@ -2305,6 +2378,10 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
     minHeight: 100,
   },
+  inputDark: {
+    backgroundColor: "#313B37",
+    color: "#FFFFFF",
+  },
   charCounter: {
     alignItems: "flex-end",
     marginTop: 8,
@@ -2312,6 +2389,9 @@ const styles = StyleSheet.create({
   charCountText: {
     fontSize: 12,
     color: "#999",
+  },
+  charCountTextDark: {
+    color: "#B8C2BC",
   },
   mediaPreview: {
     marginVertical: 16,
@@ -2348,6 +2428,9 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 12,
   },
+  mediaLabelDark: {
+    color: "#FFFFFF",
+  },
   mediaButtonRow: {
     flexDirection: "row",
     gap: 12,
@@ -2361,11 +2444,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F7F3EC",
   },
+  mediaBtnDark: {
+    borderColor: "#475F4B",
+    backgroundColor: "#313B37",
+  },
   mediaBtnText: {
     fontSize: 14,
     color: "#B1D497",
     fontWeight: "bold",
     marginTop: 8,
+  },
+  mediaBtnTextDark: {
+    color: "#D2E8D5",
   },
   tagSection: {
     marginVertical: 16,
@@ -2376,6 +2466,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
     marginBottom: 12,
+  },
+  tagLabelDark: {
+    color: "#FFFFFF",
   },
   tagGrid: {
     flexDirection: "row",
@@ -2390,14 +2483,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#eee",
   },
+  tagBtnDark: {
+    backgroundColor: "#313B37",
+    borderColor: "#475F4B",
+  },
   tagBtnSelected: {
     backgroundColor: "#B1D497",
     borderColor: "#B1D497",
+  },
+  tagBtnSelectedDark: {
+    backgroundColor: "#475F4B",
+    borderColor: "#475F4B",
   },
   tagText: {
     fontSize: 14,
     color: "#555",
     fontWeight: "600",
+  },
+  tagTextDark: {
+    color: "#D2D8D5",
   },
   tagTextSelected: {
     color: "#fff",
