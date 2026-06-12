@@ -36,7 +36,6 @@ import { getDeviceId } from "../../utils/getDeviceId";
 import { ASSET_MAP, SEED_ASSET } from "../../utils/plantCatalog";
 import {
   claimPendingRewardsOnce,
-  clearAllPlants,
   getGarden,
   getGlobalData,
   getPlantRemainingLife,
@@ -1944,45 +1943,6 @@ export default function GardenScreen() {
             {sortedPlants.length}
           </Text>
         </View>
-
-        <TouchableOpacity
-          style={[styles.clearAllButton, isDark && styles.clearAllButtonDark]}
-          onPress={() => {
-            Alert.alert(
-              "清除全部植物",
-              "確定要刪除花園裡的所有植物嗎？此動作無法復原。",
-              [
-                { text: "取消", style: "cancel" },
-                {
-                  text: "全部刪除",
-                  style: "destructive",
-                  onPress: async () => {
-                    try {
-                      resetGardenViewInstant();
-                      await clearAllPlants();
-                      await loadGarden();
-                    } catch (e) {
-                      console.error("清除全部植物失敗", e);
-                      Alert.alert("錯誤", "清除失敗，請稍後再試");
-                    }
-                  },
-                },
-              ],
-            );
-          }}
-          activeOpacity={0.8}
-        >
-          <MaterialCommunityIcons
-            name="trash-can-outline"
-            size={18}
-            color={isDark ? "#FFB3B3" : "#C62828"}
-          />
-          <Text
-            style={[styles.clearAllText, isDark && styles.clearAllTextDark]}
-          >
-            全部刪除
-          </Text>
-        </TouchableOpacity>
       </View>
 
       <View
@@ -2220,7 +2180,7 @@ export default function GardenScreen() {
       </View>
 
       {rewardToastVisible ? (
-        <View style={styles.rewardToast}>
+        <View style={[styles.rewardToast, isDark && styles.rewardToastDark]}>
           {rewardToastIcon === "eat1-image" ? (
             <Image
               source={require("../../assets/plant/eat1/eat1-1.png")}
@@ -2230,10 +2190,14 @@ export default function GardenScreen() {
             <MaterialCommunityIcons
               name={rewardToastIcon as any}
               size={20}
-              color="#6FA8DC"
+              color={isDark ? "#FFFFFF" : "#6FA8DC"}
             />
           )}
-          <Text style={styles.rewardToastText}>{rewardToastText}</Text>
+          <Text
+            style={[styles.rewardToastText, isDark && styles.rewardToastTextDark]}
+          >
+            {rewardToastText}
+          </Text>
         </View>
       ) : null}
 
@@ -2798,27 +2762,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "#E0E0E0",
     zIndex: 1000,
   },
-  clearAllButton: {
-    marginLeft: "auto",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "rgba(198, 40, 40, 0.08)",
-  },
-  clearAllButtonDark: {
-    backgroundColor: "rgba(255, 100, 100, 0.12)",
-  },
-  clearAllText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#C62828",
-  },
-  clearAllTextDark: {
-    color: "#FFB3B3",
-  },
   topBarDark: {
     backgroundColor: "#39443E",
     borderBottomColor: "#39443E",
@@ -3020,6 +2963,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
     color: "#464646",
+  },
+  rewardToastDark: {
+    backgroundColor: "#475F4B",
+  },
+  rewardToastTextDark: {
+    color: "#FFFFFF",
   },
   rewardToastImage: {
     width: 24,

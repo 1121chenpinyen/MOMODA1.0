@@ -196,7 +196,7 @@ export default function PostDetailModal({
   renderCommentInput,
 }: PostDetailModalProps) {
   const colorScheme = useColorScheme();
-  const isDark = isDarkProp ?? colorScheme === "dark";
+  const isDark = (isDarkProp ?? false) || colorScheme === "dark";
   const scrollViewRef = useRef<ScrollView>(null);
 
   // 留言區塊相對於 ScrollView 的位置
@@ -478,10 +478,26 @@ export default function PostDetailModal({
             <View style={styles.headerActionButton} />
           </View>
           {waterDropToastVisible ? (
-            <View style={styles.waterDropToast}>
-              <Ionicons name="water" size={20} color="#6FA8DC" />
+            <View
+              style={[
+                styles.waterDropToast,
+                isDark && styles.waterDropToastDark,
+              ]}
+            >
+              <Ionicons
+                name="water"
+                size={20}
+                color={isDark ? "#FFFFFF" : "#6FA8DC"}
+              />
 
-              <Text style={styles.waterDropToastText}>獲得 3 個水滴</Text>
+              <Text
+                style={[
+                  styles.waterDropToastText,
+                  isDark && styles.waterDropToastTextDark,
+                ]}
+              >
+                獲得 3 個水滴
+              </Text>
             </View>
           ) : null}
 
@@ -1307,5 +1323,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
     color: "#464646",
+  },
+  waterDropToastDark: {
+    backgroundColor: "#475F4B",
+  },
+  waterDropToastTextDark: {
+    color: "#FFFFFF",
   },
 });

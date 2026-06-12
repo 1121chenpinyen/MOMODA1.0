@@ -1197,7 +1197,7 @@ export default function HomeScreen() {
       </ScrollView>
 
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, isDark && styles.fabDark]}
         onPress={() => setPublishVisible(true)}
       >
         <Ionicons name="add" size={34} color="#fff" />
@@ -2189,6 +2189,9 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },
     elevation: 6,
+  },
+  fabDark: {
+    backgroundColor: "#475F4B",
   },
   modalOverlay: {
     flex: 1,
